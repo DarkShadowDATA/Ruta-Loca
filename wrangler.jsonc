@@ -1,0 +1,7 @@
+{
+  // Worker de Cloudflare que publica dist/ tal cual (sin compilar en la nube).
+  "name": "ruta-loca",
+  "compatibility_date": "2026-11-01",
+  "assets": { "directory": "./dist" },
+  "routes": [{ "pattern": "ruta.darkshadow-studios.com", "custom_domain": true }]
+}
