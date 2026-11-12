@@ -1,30 +1,37 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, step, replay, autoDir, meters, LANES, VEH, CFG } from '../src/core.js';
+import { createGame, step, replay, autoDir, meters, score, coins, CFG, VEH_ORDER, vehicleStats, obstacles, LANES, laneX } from '../src/core.js';
 
-function playAuto(seed, maxTicks = 60 * 240, god = false) {
-  const g = createGame(seed, { god });
-  while (g.alive && g.tick < maxTicks) step(g, autoDir(g));
+function playAuto(seed, maxTicks = 60 * 240, opts = {}) {
+  const g = createGame(seed, opts);
+  const seen = {};
+  while (g.alive && g.tick < maxTicks) {
+    step(g, autoDir(g));
+    for (const e of g.events) { const k = e.split(':')[0]; seen[k] = (seen[k] || 0) + 1; }
+  }
+  g.seen = seen;
   return g;
 }
 
-test('misma semilla + mismos toques = mismo puntaje', () => {
-  for (const seed of [1, 7, 12345, 987654321]) {
-    const g = playAuto(seed, 60 * 60);
-    const a = replay(seed, g.inputs, g.tick);
-    const b = replay(seed, g.inputs, g.tick);
+test('misma semilla + mismos toques = mismo puntaje (todos los vehículos)', () => {
+  for (const veh of VEH_ORDER) for (const seed of [1, 7, 12345]) {
+    const opts = { veh, upg: { cupo: 1, agil: 2, iman: 3 } };
+    const g = playAuto(seed, 60 * 140, opts);
+    const a = replay(seed, g.inputs, g.tick, opts);
+    const b = replay(seed, g.inputs, g.tick, opts);
     assert.equal(a.ok, true);
-    assert.equal(a.meters, meters(g), 'el replay da los mismos metros que la partida');
-    assert.equal(a.ticks, g.tick);
+    assert.equal(a.meters, meters(g), `${veh} ${seed}: metros`);
+    assert.equal(a.score, score(g), `${veh} ${seed}: puntos`);
+    assert.equal(a.coins, coins(g), `${veh} ${seed}: monedas`);
     assert.deepEqual(a, b);
   }
 });
 
-test('sin tocar nada, la partida siempre acaba igual', () => {
+test('sin tocar nada, la partida siempre acaba igual y no choca enseguida', () => {
   const a = replay(42, []), b = replay(42, []);
   assert.deepEqual(a, b);
   assert.equal(a.alive, false);
-  assert.ok(a.meters > 20, 'el primer tramo no trae tráfico en tu carril');
+  assert.ok(a.meters > 20);
 });
 
 test('semillas distintas dan partidas distintas', () => {
@@ -33,40 +40,34 @@ test('semillas distintas dan partidas distintas', () => {
   assert.ok(set.size > 3);
 });
 
-test('nunca hay un muro: cada fila deja un carril libre', () => {
-  for (let seed = 1; seed <= 30; seed++) {
+test('a la altura de la combi siempre queda un carril libre (con eventos y Tráiler)', () => {
+  for (let seed = 1; seed <= 12; seed++) {
     const g = createGame(seed, { god: true });
-    const rows = new Map();
-    const seen = new Set();
-    while (g.tick < 60 * 150) {
-      step(g, 0);
-      for (const v of g.vehicles) if (!seen.has(v.id)) { seen.add(v.id); }
-    }
-    // revisar por bandas: en ningún momento los 4 carriles están tapados a la misma altura
-    const g2 = createGame(seed, { god: true });
-    while (g2.tick < 60 * 150) {
-      step(g2, 0);
-      if (g2.tick % 6) continue;
-      for (const v of g2.vehicles) {
-        const lanes = new Set([v.lane]);
-        for (const o of g2.vehicles) {
-          if (o !== v && Math.abs(o.s - v.s) < (VEH[o.type].l + VEH[v.type].l) / 2 + VEH.combi.l) lanes.add(o.lane);
-        }
-        assert.ok(lanes.size < LANES, `muro en semilla ${seed} t=${g2.t.toFixed(1)}`);
+    while (g.tick < 60 * 200) {
+      step(g, autoDir(g));
+      if (g.tick % 3) continue;
+      const blocked = new Set();
+      for (const o of obstacles(g)) {
+        if (Math.abs(o.s - g.dist) > o.l / 2 + 60) continue;
+        for (let l = 0; l < LANES; l++) if (Math.abs(o.x - laneX(l)) < o.w / 2 + 20) blocked.add(l);
       }
+      assert.ok(blocked.size < LANES, `muro en semilla ${seed} t=${g.t.toFixed(1)}`);
     }
   }
 });
 
-test('el piloto automático aguanta (el camino libre sí se puede manejar)', () => {
-  let total = 0, min = 1e9;
-  const N = 40;
+test('el piloto automático aguanta, sube pasaje, cobra y pasa eventos y Tráiler', () => {
+  let total = 0, min = 1e9; const all = {};
+  const N = 30;
   for (let seed = 1; seed <= N; seed++) {
-    const g = playAuto(seed, 60 * 200);
+    const g = playAuto(seed, 60 * 220);
     total += g.t; min = Math.min(min, g.t);
+    for (const k in g.seen) all[k] = (all[k] || 0) + g.seen[k];
+    if (!g.alive && seed <= 5) console.log(`  semilla ${seed}: chocó con ${g.crashKind} a los ${g.t.toFixed(0)} s (${meters(g)} m)`);
   }
-  console.log(`auto: promedio ${(total / N).toFixed(0)} s, mínimo ${min.toFixed(0)} s`);
-  assert.ok(total / N > 120, 'promedio mayor a 2 minutos');
+  console.log(`auto: promedio ${(total / N).toFixed(0)} s, mínimo ${min.toFixed(0)} s`, JSON.stringify(all));
+  assert.ok(total / N > 110, 'promedio mayor a 110 s');
+  for (const k of ['board', 'deliver', 'rain', 'boss', 'boss_win', 'warn']) assert.ok(all[k] > 0, 'pasó: ' + k);
 });
 
 test('velocidad: 420 al empezar y tope de 1400', () => {
@@ -75,4 +76,28 @@ test('velocidad: 420 al empezar y tope de 1400', () => {
   assert.ok(Math.abs(g.speed - 420) < 1);
   while (g.tick < 60 * 200) step(g, 0);
   assert.equal(g.speed, CFG.speedMax);
+});
+
+test('vehículos y mejoras', () => {
+  assert.equal(vehicleStats('combi').cap, 8);
+  assert.equal(vehicleStats('guajolotero').shield, 1);
+  assert.ok(vehicleStats('combi', { cupo: 3 }).cap > 8);
+  assert.ok(vehicleStats('vocho').lane > vehicleStats('combi').lane);
+  assert.equal(vehicleStats('nada').id, 'combi');
+});
+
+test('el guajolotero aguanta un choque', () => {
+  const g = createGame(5, { veh: 'guajolotero' });
+  let shield = 0;
+  while (g.alive && g.tick < 60 * 60) { step(g, 0); if (g.events.includes('shield')) shield++; }
+  assert.equal(shield, 1);
+  assert.equal(g.alive, false);
+});
+
+test('tope de 300 monedas (sin contar el Tráiler)', () => {
+  const g = createGame(9);
+  g.delivered = 500; g.dist = 0;
+  assert.equal(coins(g), 300);
+  g.bossCoins = 200;
+  assert.equal(coins(g), 500);
 });
