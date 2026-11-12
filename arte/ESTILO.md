@@ -16,6 +16,6 @@ top-down 2D car sprite for a retro overhead racing game like GTA 2, orthographic
 ```
 
 ## Prompts aprobados
-- `veh_combi` ← `art_src/gen/combi_7.jpg` (rot 180): bloque base + «a 1960s split-window minibus van used as Mexican public transport, cream white roof with a wide orange band across the front and a teal stripe, small roof rack with tied brown bundles in the middle»
+- `veh_combi` ← `art_src/gen/combi_6.jpg` (rot 180; Alejandro eligió esta, la opción 1; se tapó un emblema del frente que parecía de VW). Mismo prompt que la opción 2 (`combi_7.jpg`): bloque base + «a 1960s split-window minibus van used as Mexican public transport, cream white roof with a wide orange band across the front and a teal stripe, small roof rack with tied brown bundles in the middle»
 - `trafico_sedan_rojo` ← `art_src/gen/sedan_2.jpg` (rot 180): bloque base (sin «long vertical shape») + «a red compact sedan, windshield at the top, rear window at the bottom»
 - `trafico_ny_taxi` ← `art_src/gen/taxi_2.jpg`: bloque base + «a yellow new york taxi cab» (trae la palabra TAXI en el letrero; aceptable)
