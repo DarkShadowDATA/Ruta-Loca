@@ -40,8 +40,15 @@ const OUT = 0x2a1c12, GLASS = 0x9fd8ef;
 const FONT = '"Arial Black", "Arial Bold", Impact, system-ui, sans-serif';
 const $ = (id) => document.getElementById(id);
 
+// Arte final (src/img/<textura>.webp). Si existe, reemplaza al dibujo de código con el mismo nombre.
+const IMGS = import.meta.glob('./img/*.webp', { eager: true, query: '?url', import: 'default' });
+
 class Juego extends Phaser.Scene {
   constructor() { super('juego'); }
+
+  preload() {
+    for (const [path, url] of Object.entries(IMGS)) this.load.image(path.split('/').pop().replace('.webp', ''), url);
+  }
 
   create() {
     this.save = loadSave();
@@ -95,10 +102,11 @@ class Juego extends Phaser.Scene {
   // ---------- texturas hechas con código ----------
   makeTextures() {
     const g = this.make.graphics({ x: 0, y: 0, add: false });
-    for (const id of VEH_ORDER) { const v = VEHICLES[id]; this.drawVeh(g, id, v.w, v.l); g.generateTexture('veh_' + id, v.w + 20, v.l + 20); g.clear(); }
-    for (const t in VEH) { const v = VEH[t]; this.drawVeh(g, t, v.w, v.l); g.generateTexture('trafico_' + t, v.w + 20, v.l + 20); g.clear(); }
+    const make = (key, w, l, fn) => { if (this.textures.exists(key)) return; fn(); g.generateTexture(key, w + 20, l + 20); g.clear(); };
+    for (const id of VEH_ORDER) { const v = VEHICLES[id]; make('veh_' + id, v.w, v.l, () => this.drawVeh(g, id, v.w, v.l)); }
+    for (const t in VEH) { const v = VEH[t]; make('trafico_' + t, v.w, v.l, () => this.drawVeh(g, t, v.w, v.l)); }
     const c = VEHICLES.combi;
-    for (const id in PAINTS) { this.drawVeh(g, 'combi', c.w, c.l, PAINTS[id]); g.generateTexture('veh_combi_' + id, c.w + 20, c.l + 20); g.clear(); }
+    for (const id in PAINTS) make('veh_combi_' + id, c.w, c.l, () => this.drawVeh(g, 'combi', c.w, c.l, PAINTS[id]));
     g.destroy();
   }
 
