@@ -95,6 +95,11 @@ const BACHE = { w: 56, l: 44 };
 
 export function laneX(lane) { return ROAD_X + LANE_W * (lane + 0.5); }
 
+/** Semilla numérica a partir del texto que da el servidor en el Pozo (FNV-1a, igual en todos lados). */
+export function seedFrom(str) { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+/** Reglas del Pozo de Ruta Loca: todos con la Combi base, sin mejoras, en la Ruta 1. */
+export const POZO_RL = { veh: 'combi', ruta: 1, maxTicks: 60 * 60 * 15, maxInputs: 20000 };
+
 function rnd(g) {   // mulberry32
   g.rs = (g.rs + 0x6D2B79F5) | 0;
   let t = g.rs;

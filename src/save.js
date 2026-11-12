@@ -6,7 +6,7 @@ const OLD = 'rl_save_v0';
 
 function blank() {
   return { best: 0, bestScore: 0, runs: 0, coins: 0, owned: { combi: true }, sel: 'combi', upg: {}, sound: true, totalPax: 0, totalM: 0,
-    ruta: 1, bestBy: {}, ach: {}, missions: null, totalNears: 0, bossWins: 0, coinsEarned: 0, fullLoads: 0, maxCombo: 0, bestM: 0, timePlayed: 0 };
+    ruta: 1, bestBy: {}, ach: {}, missions: null, paint: '', applied: {}, trialDay: '', totalNears: 0, bossWins: 0, coinsEarned: 0, fullLoads: 0, maxCombo: 0, bestM: 0, timePlayed: 0 };
 }
 
 export function loadSave() {
@@ -24,7 +24,28 @@ export function loadSave() {
   return s;
 }
 
-export function writeSave(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* lleno o bloqueado */ } }
+let persistHook = null;
+/** La nube se entera de cada guardado (para subirlo un poco después). */
+export function onPersist(fn) { persistHook = fn; }
+export function writeSave(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* lleno o bloqueado */ } if (persistHook) persistHook(); }
+
+/** Junta dos guardados (celular y nube) sin perder nada: lo mejor de cada uno. La base es el que más monedas ha ganado. */
+export function mergeSaves(a, b) {
+  if (!b || typeof b !== 'object') return a;
+  const [base, other] = (b.coinsEarned | 0) > (a.coinsEarned | 0) ? [b, a] : [a, b];
+  const m = JSON.parse(JSON.stringify(base));
+  const max = (k) => { m[k] = Math.max(a[k] | 0, b[k] | 0); };
+  ['best', 'bestScore', 'bestM', 'maxCombo'].forEach(max);
+  m.owned = { ...(other.owned || {}), ...(base.owned || {}) };
+  m.bestBy = { ...(other.bestBy || {}) }; for (const r in base.bestBy || {}) m.bestBy[r] = Math.max(m.bestBy[r] | 0, base.bestBy[r] | 0);
+  m.ach = { ...(other.ach || {}) }; for (const k in base.ach || {}) m.ach[k] = Math.max(m.ach[k] | 0, base.ach[k] | 0);
+  m.upg = m.upg || {}; for (const id in other.upg || {}) { m.upg[id] = m.upg[id] || {}; for (const k in other.upg[id]) m.upg[id][k] = Math.max(m.upg[id][k] | 0, other.upg[id][k] | 0); }
+  m.applied = { ...(other.applied || {}), ...(base.applied || {}) };
+  m.openRoutes = { ...(other.openRoutes || {}), ...(base.openRoutes || {}) };
+  return m;
+}
+/** Cambia el contenido del guardado sin cambiar el objeto (el juego tiene la referencia). */
+export function replaceSave(s, next) { for (const k of Object.keys(s)) delete s[k]; Object.assign(s, next); }
 
 export function buyVehicle(s, id) {
   const v = VEHICLES[id];

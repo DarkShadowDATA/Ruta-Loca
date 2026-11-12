@@ -11,8 +11,11 @@ import { dailyMissions, addRun, ACHIEVEMENTS, MEDAL, MEDAL_REWARD, statValue, me
 import { loadSave, writeSave, buyVehicle, buyUpgrade, upgradeCost } from './save.js';
 import * as S from './sound.js';
 import { dsTrack } from './dsev.js';
+import { seedFrom, POZO_RL } from './core.js';
+import { nube, onNube, startNube, buy, loginUrl, shadowUrl, PAINTS, NORMAL_PAINTS, RAR_NAME, paintOfDay, ownedPaints,
+  mercadoGet, mercadoVender, mercadoCancelar, mercadoComprar, pozoInfo, pozoStart, pozoFinish } from './tienda.js';
 
-const VERSION = '0.6.0';
+const VERSION = '0.7.0';
 let Q;
 try { Q = new URLSearchParams(location.search); } catch { Q = new URLSearchParams(''); }
 const P = {
@@ -75,7 +78,9 @@ class Juego extends Phaser.Scene {
     this.newGame();
     this.bindInput();
     this.bindUI();
-    dsTrack('game_opened', 'ruta');
+    dsTrack('game_opened', 'rutaloca');
+    onNube(() => { if (this.mode === 'menu' && $('menu').classList.contains('on')) this.showMenu(); });
+    startNube(this.save);
 
     if (P.go) this.start();
     else if (P.menu === 'garaje') this.showGarage();
@@ -92,10 +97,12 @@ class Juego extends Phaser.Scene {
     const g = this.make.graphics({ x: 0, y: 0, add: false });
     for (const id of VEH_ORDER) { const v = VEHICLES[id]; this.drawVeh(g, id, v.w, v.l); g.generateTexture('veh_' + id, v.w + 20, v.l + 20); g.clear(); }
     for (const t in VEH) { const v = VEH[t]; this.drawVeh(g, t, v.w, v.l); g.generateTexture('trafico_' + t, v.w + 20, v.l + 20); g.clear(); }
+    const c = VEHICLES.combi;
+    for (const id in PAINTS) { this.drawVeh(g, 'combi', c.w, c.l, PAINTS[id]); g.generateTexture('veh_combi_' + id, c.w + 20, c.l + 20); g.clear(); }
     g.destroy();
   }
 
-  drawVeh(g, type, w, l) {
+  drawVeh(g, type, w, l, paint = null) {
     const cx = w / 2 + 10, cy = l / 2 + 10;
     const R = (x, y, ww, hh, r, c, a = 1) => { g.fillStyle(c, a); g.fillRoundedRect(cx + x, cy + y, ww, hh, r); };
     if (type === 'moto') {
@@ -108,7 +115,7 @@ class Juego extends Phaser.Scene {
     }
     g.fillStyle(0x15171b);
     for (const sx of [-1, 1]) for (const sy of [-1, 1]) g.fillRoundedRect(cx + sx * (w / 2 - 4) - 7, cy + sy * (l / 2 - Math.min(38, l * 0.22)) - 17, 14, 34, 5);
-    const body = { combi: 0xf4f1e6, vocho: 0x7cc6e8, micro: 0x3f9b5a, taxi: 0xff8fb8, guajolotero: 0x2f6fc0 }[type] ?? TCOL[type] ?? 0xcccccc;
+    const body = paint ? paint.body : ({ combi: 0xf4f1e6, vocho: 0x7cc6e8, micro: 0x3f9b5a, taxi: 0xff8fb8, guajolotero: 0x2f6fc0 }[type] ?? TCOL[type] ?? 0xcccccc);
     if (type.endsWith('_moto')) {
       R(-9, -l / 2, 18, 30, 6, 0x15171b); R(-9, l / 2 - 30, 18, 30, 6, 0x15171b);
       R(-14, -l / 2 + 18, 28, l - 36, 10, OUT); R(-11, -l / 2 + 21, 22, l - 42, 8, body);
@@ -124,7 +131,17 @@ class Juego extends Phaser.Scene {
     }
     const rr = type === 'vocho' ? Math.min(w, l) * 0.42 : 18;
     R(-w / 2, -l / 2, w, l, rr, OUT); R(-w / 2 + 5, -l / 2 + 5, w - 10, l - 10, rr - 4, body);
-    if (type === 'combi') {
+    if (type === 'combi' && paint) {
+      const A = paint.a, B = paint.b, t = paint.tipo;
+      if (t === 'flamas') { for (let i = 0; i < 4; i++) { g.fillStyle(i % 2 ? B : A); g.fillTriangle(cx - w / 2 + 6 + i * 20, cy - l / 2 + 60, cx - w / 2 + 16 + i * 20, cy + 10 + (i % 2) * 30, cx - w / 2 + 26 + i * 20, cy - l / 2 + 60); } }
+      if (t === 'rayas') { R(-w / 2 + 5, -l / 2 + 46, w - 10, 10, 0, A); R(-w / 2 + 5, l / 2 - 40, w - 10, 10, 0, B); R(-6, -l / 2 + 60, 12, l - 100, 4, A); }
+      if (t === 'mitad') R(-w / 2 + 5, -l / 2 + 70, w - 10, l / 2 - 40, 10, A);
+      if (t === 'mascara') { g.fillStyle(A); g.fillCircle(cx, cy + 10, 26); g.fillStyle(B); g.fillTriangle(cx - 18, cy, cx - 4, cy + 4, cx - 18, cy + 12); g.fillTriangle(cx + 18, cy, cx + 4, cy + 4, cx + 18, cy + 12); }
+      if (t === 'puntos') { for (let y = -l / 2 + 60; y < l / 2 - 20; y += 30) for (let x = -w / 2 + 20; x < w / 2 - 10; x += 26) { g.fillStyle(A); g.fillCircle(cx + x, cy + y, 8); g.fillStyle(B); g.fillCircle(cx + x, cy + y, 3); } }
+      if (t === 'brillo') { R(-w / 2 + 10, -l / 2 + 50, 14, l - 70, 6, A, 0.8); R(w / 2 - 22, -l / 2 + 50, 6, l - 70, 3, B, 0.8); }
+      if (t === 'calavera') { g.fillStyle(A); g.fillCircle(cx, cy + 6, 24); g.fillRect(cx - 14, cy + 22, 28, 14); g.fillStyle(B); g.fillCircle(cx - 9, cy + 4, 7); g.fillCircle(cx + 9, cy + 4, 7); }
+      R(-w / 2 + 12, -l / 2 + 12, w - 24, 28, 8, GLASS);
+    } else if (type === 'combi') {
       R(-w / 2 + 5, -l / 2 + 46, w - 10, 16, 0, 0xf2a51f); R(-w / 2 + 5, -l / 2 + 62, w - 10, 8, 0, 0x2f9e8f);
       R(-w / 2 + 12, -l / 2 + 12, w - 24, 28, 8, GLASS); R(-w / 2 + 14, -l / 2 + 80, w - 28, l - 110, 8, 0xe2ded0);
       R(-w / 2 + 20, -l / 2 + 92, w - 40, 22, 4, 0x8a5a32); R(-w / 2 + 24, -l / 2 + 120, w - 48, 18, 4, 0x6f8a3a);
@@ -164,21 +181,29 @@ class Juego extends Phaser.Scene {
   // ---------- partida ----------
   newGame() {
     const seed = P.seed != null ? P.seed : ((Math.random() * 4294967296) >>> 0);
-    const id = this.save.sel;
-    this.g = createGame(seed, { god: P.god, veh: id, upg: this.save.upg[id], ruta: this.save.ruta });
-    this.player.setTexture('veh_' + this.g.P.id);
+    const id = this.pozo ? POZO_RL.veh : this.save.sel;
+    this.g = this.pozo ? createGame(seedFrom(this.pozo.seed), { veh: POZO_RL.veh, ruta: POZO_RL.ruta })
+      : createGame(seed, { god: P.god, veh: id, upg: this.save.upg[id], ruta: this.save.ruta });
+    this.player.setTexture(this.vehTex(this.g.P.id));
     this.queue.length = 0; this.acc = 0; this.sparks.length = 0;
     this.crash = null; this.tilt = 0; this.slow = 0; this.warnT = 0; this.popT = 0; this.knock.setVisible(false);
     for (const f of this.tFloat) f.t.destroy();
     this.tFloat = [];
   }
 
-  start() {
+  vehTex(id) {
+    const p = this.trial || this.save.paint;
+    return id === 'combi' && p && PAINTS[p] ? 'veh_combi_' + p : 'veh_' + id;
+  }
+
+  start(pozo = null) {
+    this.pozo = pozo;
+    if (!pozo && this.trialNext) { this.trial = this.trialNext; this.trialNext = null; } else if (!pozo) this.trial = null;
     S.unlock();
     this.newGame();
     this.mode = 'play'; this.modeT = 0;
     this.screen(null);
-    if (!this.startedOnce) { this.startedOnce = true; dsTrack('game_started', 'ruta'); }
+    if (!this.startedOnce) { this.startedOnce = true; dsTrack('game_started', 'rutaloca'); }
     if (P.t > 0) {
       const god = this.g.god; this.g.god = true;
       while (this.g.t < P.t) step(this.g, autoDir(this.g));
@@ -231,7 +256,13 @@ class Juego extends Phaser.Scene {
     this.scale.on('resize', fit); window.addEventListener('resize', () => setTimeout(fit, 50)); setTimeout(fit, 0); fit();
     const click = (id, fn) => $(id).addEventListener('click', (e) => { e.stopPropagation(); S.unlock(); S.sfx('click'); fn(); });
     click('b-play', () => this.start());
-    click('b-again', () => this.start());
+    click('b-tienda', () => this.showTienda());
+    click('b-pozo', () => this.showPozo());
+    click('b-acc', () => { if (nube.on) this.toast('👤 ' + nube.name); else if (nube.can) location.href = loginUrl(); else this.toast('La cuenta se usa en ruta.darkshadow-studios.com'); });
+    click('b-tback', () => this.showMenu());
+    click('b-pback', () => this.showMenu());
+    click('b-mback', () => this.showTienda());
+    click('b-again', () => (this.pozo ? this.showPozo() : this.start()));
     click('b-garage', () => this.showGarage());
     click('b-ogarage', () => this.showGarage());
     click('b-menu', () => this.showMenu());
@@ -248,13 +279,21 @@ class Juego extends Phaser.Scene {
   }
 
   screen(id) {
-    for (const s of ['menu', 'over', 'garage', 'pause', 'logros', 'stats']) $(s).classList.toggle('on', s === id);
+    for (const s of ['menu', 'over', 'garage', 'pause', 'logros', 'stats', 'tienda', 'pozo', 'mercado']) $(s).classList.toggle('on', s === id);
   }
 
   showMenu() {
     this.mode = 'menu'; this.modeT = 0; S.engineStop(); S.rainSound(false);
-    this.player.setTexture('veh_' + this.save.sel);
+    this.pozo = null; this.player.setTexture(this.vehTex(this.save.sel));
     const s = this.save, r = s.ruta, R = ROUTES[r], open = routeOpen(s, r);
+    $('b-acc').textContent = nube.on ? '👤 ✓' : '👤';
+    const cards = [];
+    const pd = paintOfDay();
+    if (!ownedPaints().includes(pd)) cards.push(`<div class="card" id="c-trial"><span><b>¡GRATIS HOY!</b> Pintura ${PAINTS[pd].name} por una partida</span><span>▶</span></div>`);
+    if ((s.bestM | 0) >= 1000 && !(nube.compras.inicio > 0)) cards.push(`<div class="card" id="c-inicio"><span><b>Paquete de inicio</b> Vocho + 500 🪙 + pintura Flamas</span><span>10 💠</span></div>`);
+    $('m-cards').innerHTML = cards.join('');
+    $('c-trial')?.addEventListener('click', () => { if (s.trialDay === new Date().toDateString()) { this.toast('Ya la probaste hoy. Mañana hay otra.'); return; } s.trialDay = new Date().toDateString(); writeSave(s); this.trialNext = pd; S.sfx('buy'); this.start(); });
+    $('c-inicio')?.addEventListener('click', () => this.showTienda());
     $('m-best').textContent = s.bestBy?.[r] | 0; $('m-coins').textContent = s.coins;
     $('b-sound').textContent = s.sound ? '🔊' : '🔇';
     const prev = ROUTE_ORDER[ROUTE_ORDER.indexOf(r) - 1];
@@ -294,11 +333,24 @@ class Juego extends Phaser.Scene {
           <button class="btn" data-up="${k}" ${!c || s.coins < c ? 'disabled' : ''}>${c ? '🪙 ' + c : 'Máximo'}</button></div>`;
       }
     }
+    // pinturas de la Combi (solo cambian cómo se ve)
+    if (id === 'combi' && own) {
+      const mine = ownedPaints();
+      h += `<div class="sec-t" style="font-size:28px;margin:14px 0 4px">Pinturas</div><div class="paints">` +
+        ['', ...mine].map((p) => `<button data-paint="${p}" class="${(s.paint || '') === p ? 'on' : ''}"><img src="${this.textures.getBase64(p ? 'veh_combi_' + p : 'veh_combi')}" alt=""></button>`).join('') +
+        `</div><div class="note">${mine.length ? '' : 'Consigue pinturas en la 🛒 Tienda. '}Solo cambian cómo se ve.</div>`;
+    }
+    if (!own && nube.tienda.find((t) => t.id === 'veh_' + id)) {
+      const t = nube.tienda.find((x) => x.id === 'veh_' + id);
+      h += `<div class="note">¿Lo quieres ya? <button class="btn sec" id="g-adel" style="font-size:24px;padding:8px 18px;margin:0 0 0 8px">${t.shadow} 💠 por adelantado</button></div>`;
+    }
     $('det').innerHTML = h;
     $('g-buy')?.addEventListener('click', () => { if (buyVehicle(s, id)) { S.sfx('buy'); this.toast('¡Nuevo: ' + v.name + '!'); } else S.sfx('no'); this.showGarage(id); });
     $('g-use')?.addEventListener('click', () => { s.sel = id; writeSave(s); S.sfx('click'); this.showGarage(id); });
+    $('g-adel')?.addEventListener('click', () => this.buyItem('veh_' + id, () => this.showGarage(id)));
     for (const b of $('det').querySelectorAll('[data-up]')) b.addEventListener('click', () => { if (buyUpgrade(s, id, b.dataset.up)) S.sfx('buy'); else S.sfx('no'); this.showGarage(id); });
-    this.player.setTexture('veh_' + s.sel);
+    for (const b of $('det').querySelectorAll('[data-paint]')) b.addEventListener('click', () => { s.paint = b.dataset.paint; writeSave(s); S.sfx('click'); this.showGarage(id); });
+    this.player.setTexture(this.vehTex(s.sel));
     this.screen('garage');
   }
 
@@ -330,6 +382,90 @@ class Juego extends Phaser.Scene {
       ...ROUTE_ORDER.map((r) => ['Récord ' + ROUTES[r].name, routeOpen(s, r) ? (s.bestBy?.[r] | 0) + ' m' : '🔒'])];
     $('s-list').innerHTML = rows.map(([a, b]) => `<div><span>${a}</span><b>${b}</b></div>`).join('');
     this.screen('stats');
+  }
+
+  // ---------- Tienda Shadow (único lugar para comprar) ----------
+  async buyItem(item, after) {
+    if (!nube.on) { if (nube.can) location.href = loginUrl(); else this.toast('Inicia sesión en ruta.darkshadow-studios.com'); return; }
+    try { await buy(item); S.sfx('buy'); this.toast('¡Listo!'); }
+    catch (e) { S.sfx('no'); if (e.status === 402) { this.toast('Te falta Shadow'); setTimeout(() => { location.href = shadowUrl(); }, 900); } else this.toast(e.message); }
+    writeSave(this.save);
+    (after || (() => this.showTienda()))();
+  }
+
+  showTienda() {
+    this.mode = 'menu';
+    $('t-shadow').textContent = nube.on ? nube.shadow : '—';
+    const has = (id) => (nube.compras[id] | 0) > 0;
+    const row = (img, name, sub, btn) => `<div class="shop">${img ? `<img src="${img}" alt="">` : ''}<div class="grow"><b>${name}</b>${sub}</div>${btn}</div>`;
+    const bb = (id, price, done, label) => done ? `<button class="btn" disabled>${label || 'Tuyo'}</button>` : `<button class="btn" data-buy="${id}">${price} 💠</button>`;
+    let h = '';
+    if (!nube.on) h += `<div class="note">${nube.can ? 'Para comprar, inicia sesión con tu cuenta DarkShadow.' : 'La tienda funciona en ruta.darkshadow-studios.com con tu cuenta DarkShadow.'}</div>` + (nube.can ? `<button class="btn" id="t-login" style="font-size:34px;padding:14px 34px">Iniciar sesión</button>` : '');
+    else h += `<div class="note">La Shadow se consigue en darkshadow-studios.com/cuenta. <a href="${shadowUrl()}" style="color:#ffd84a">Conseguir Shadow ›</a></div>`;
+    const t = (id) => nube.tienda.find((x) => x.id === id);
+    h += `<div class="sec-t">🎨 Pinturas de la Combi</div><div class="note">Solo cambian cómo se ve. Cada día te prestamos una gratis por una partida.</div>`;
+    for (const p of NORMAL_PAINTS) h += row(this.textures.getBase64('veh_combi_' + p), PAINTS[p].name, '', bb('pint_' + p, t('pint_' + p)?.shadow ?? 20, ownedPaints().includes(p)));
+    h += `<div class="sec-t">✨ Ediciones limitadas</div><div class="note">Cada una trae su número de serie. Cuando se acaban, solo se consiguen con otro jugador.</div>`;
+    for (const e of nube.ediciones.length ? nube.ediciones : [{ ref: 'combi_dorada', shadow: 30, rar: 3, total: 100, quedan: 100 }, { ref: 'combi_cromo', shadow: 20, rar: 2, total: 300, quedan: 300 }, { ref: 'combi_calavera', shadow: 15, rar: 1, total: 500, quedan: 500 }])
+      h += row(this.textures.getBase64('veh_combi_' + e.ref), PAINTS[e.ref].name, `<small>${RAR_NAME[e.rar]} · quedan ${e.quedan} de ${e.total}</small>`, e.quedan > 0 ? bb('ed_' + e.ref, e.shadow, false) : '<button class="btn" disabled>Agotada</button>');
+    if ((this.save.bestM | 0) >= 1000 || has('inicio')) h += `<div class="sec-t">🎁 Paquete de inicio</div>` + row(this.textures.getBase64('veh_vocho'), 'Vocho + 500 🪙 + Flamas', '<small>Una sola vez</small>', bb('inicio', 10, has('inicio')));
+    h += `<div class="sec-t">🚐 Vehículos por adelantado</div><div class="note">Todos se consiguen jugando; pagar solo adelanta.</div>`;
+    for (const id of VEH_ORDER.slice(1)) { const it = t('veh_' + id); h += row(this.textures.getBase64('veh_' + id), VEHICLES[id].name, `<small>o ${VEHICLES[id].price} 🪙 en el Garaje</small>`, bb('veh_' + id, it?.shadow ?? '—', this.save.owned[id])); }
+    if (nube.mercado) h += `<div class="sec-t">🏪 Mercado</div>` + row('', 'Pinturas de colección', '<small>Compra y vende con otros jugadores</small>', '<button class="btn" id="t-merc">Abrir</button>');
+    h += `<div class="sec-t">☕ Apoyar al estudio</div>` + row('', 'Invítanos un café', `<small>${this.save.apoyo ? 'Ya tienes la insignia ☕ Apoyo. ¡Gracias!' : 'Da la insignia «☕ Apoyo». Se puede repetir.'}</small>`, bb('apoyo', 10, false));
+    $('t-list').innerHTML = h;
+    $('t-login')?.addEventListener('click', () => { location.href = loginUrl(); });
+    $('t-merc')?.addEventListener('click', () => this.showMercado());
+    for (const b of $('t-list').querySelectorAll('[data-buy]')) b.addEventListener('click', () => { S.unlock(); this.buyItem(b.dataset.buy); });
+    this.screen('tienda');
+  }
+
+  // ---------- Ruta del Pozo ----------
+  async showPozo() {
+    this.mode = 'menu'; this.screen('pozo');
+    const L = $('p-list');
+    const rules = `<div class="note">Todos con la Combi base, sin mejoras, en la Ruta 1 · 3 intentos al día · cuenta tu mejor partida · premios cada lunes al top 5. Lo comprado no da ventaja aquí.</div>`;
+    if (!nube.on) { L.innerHTML = `<div class="note">${nube.can ? 'Para jugar el Pozo inicia sesión con tu cuenta DarkShadow.' : 'El Pozo se juega en ruta.darkshadow-studios.com.'}</div>` + (nube.can ? '<button class="btn" id="p-login" style="font-size:34px">Iniciar sesión</button>' : '') + rules; $('p-login')?.addEventListener('click', () => { location.href = loginUrl(); }); return; }
+    L.innerHTML = '<div class="note">Cargando…</div>';
+    let d;
+    try { d = await pozoInfo(); } catch (e) { L.innerHTML = `<div class="note">${e.message}</div>`; return; }
+    const hrs = Math.max(0, Math.round((new Date(d.endsAt).getTime() - Date.now()) / 3600e3));
+    const esc = (x) => String(x ?? '').replace(/[&<>"']/g, '');
+    L.innerHTML = (d.on ? `<div class="lines" style="min-width:0">${['🥇', '🥈', '🥉', '4º', '5º'].map((m, i) => `<div><span>${m}</span><b>${d.prizes[i] || 0} 💠 · ${((d.prizes[i] || 0) / 10).toFixed(2)} USD</b></div>`).join('')}</div>`
+      : `<div class="note">Los premios de esta semana todavía no están activos: por ahora se juega por el récord.</div>`) +
+      `<div class="note">Termina en ${hrs >= 24 ? `${Math.floor(hrs / 24)} d ${hrs % 24} h` : `${hrs} h`} · tu mejor: <b>${d.best}</b>${d.rank ? ` (#${d.rank})` : ''}</div>` +
+      (d.top.length ? `<div class="lines" style="min-width:0">${d.top.map((t) => `<div><span>${t.rank}. ${esc(t.name)}${t.me ? ' (tú)' : ''}</span><b>${t.score}</b></div>`).join('')}</div>` : '<div class="note">Nadie ha jugado esta semana. ¡Sé el primero!</div>') +
+      `<button class="btn" id="p-go" ${d.attemptsLeft ? '' : 'disabled'} style="font-size:44px">${d.attemptsLeft ? `¡A MANEJAR! (${d.attemptsLeft} hoy)` : 'Vuelve mañana'}</button><div class="note" id="p-msg"></div>` + rules;
+    $('p-go').addEventListener('click', async () => {
+      if (!d.attemptsLeft) return;
+      $('p-go').disabled = true;
+      try { const a = await pozoStart(); this.start(a); } catch (e) { $('p-msg').textContent = e.message; $('p-go').disabled = false; }
+    });
+  }
+
+  // ---------- Mercado de pinturas de colección ----------
+  async showMercado() {
+    this.mode = 'menu'; this.screen('mercado');
+    const L = $('k-list'); L.innerHTML = '<div class="note">Cargando…</div>';
+    let d;
+    try { d = await mercadoGet(); } catch (e) { L.innerHTML = `<div class="note">${e.message}</div>`; return; }
+    $('k-shadow').textContent = d.shadow;
+    if (!d.on) { L.innerHTML = '<div class="note">El mercado todavía no está abierto.</div>'; return; }
+    const img = (ref) => this.textures.getBase64('veh_combi_' + ref);
+    const pr = d.reglas.precios;
+    let h = `<div class="note">Comisión 10 % · la venta se publica 7 días · lo ganado en ventas no se puede retirar.</div><div class="sec-t">A la venta</div>`;
+    h += d.listings.length ? d.listings.map((l) => `<div class="shop"><img src="${img(l.ref)}" alt=""><div class="grow"><b>${PAINTS[l.ref]?.name || l.ref}</b><small>${RAR_NAME[l.rar]}${l.serial ? ` · nº ${l.serial}` : ''}</small></div>${l.mine ? `<button class="btn" data-cancel="${l.id}">Quitar</button>` : `<button class="btn" data-get="${l.id}">${l.price} 💠</button>`}</div>`).join('') : '<div class="note">No hay nada a la venta ahora.</div>';
+    const mine = d.items.filter((i) => i.status === 'bodega');
+    h += `<div class="sec-t">Tus pinturas de colección</div>` + (mine.length ? mine.map((i) => `<div class="shop"><img src="${img(i.ref)}" alt=""><div class="grow"><b>${PAINTS[i.ref]?.name || i.ref}</b><small>${RAR_NAME[i.rar]}${i.serial ? ` · nº ${i.serial}` : ''} · precio ${pr[i.rar][0]}–${pr[i.rar][1]} 💠</small></div><button class="btn" data-sell="${i.id}" data-min="${pr[i.rar][0]}" data-max="${pr[i.rar][1]}" ${i.espera > 0 ? 'disabled' : ''}>Vender</button></div>`).join('') : '<div class="note">No tienes pinturas de colección.</div>');
+    L.innerHTML = h;
+    const act = async (fn) => { try { await fn(); S.sfx('buy'); } catch (e) { S.sfx('no'); this.toast(e.message); } this.showMercado(); };
+    for (const b of L.querySelectorAll('[data-get]')) b.addEventListener('click', () => act(() => mercadoComprar(b.dataset.get)));
+    for (const b of L.querySelectorAll('[data-cancel]')) b.addEventListener('click', () => act(() => mercadoCancelar(b.dataset.cancel)));
+    for (const b of L.querySelectorAll('[data-sell]')) b.addEventListener('click', () => {
+      const min = +b.dataset.min, max = +b.dataset.max;
+      b.outerHTML = `<span><input id="k-price" type="number" min="${min}" max="${max}" value="${min}" style="width:110px;font-size:26px"> <button class="btn" id="k-ok">Publicar</button></span>`;
+      $('k-ok').addEventListener('click', () => act(() => mercadoVender(b.dataset.sell, Math.round(+$('k-price').value))));
+    });
   }
 
   toast(t) { const e = $('toast'); e.textContent = t; e.style.display = 'block'; clearTimeout(this.toastT); this.toastT = setTimeout(() => { e.style.display = 'none'; }, 1400); }
@@ -432,7 +568,17 @@ class Juego extends Phaser.Scene {
     for (const r of res.opened) news.push(`🗺 ¡Nueva ruta: ${ROUTES[r].name}!`);
     for (const mi of res.missionsDone) news.push(`✅ Misión: ${mi.def.text(mi.def.n)} · +${mi.def.reward} 🪙`);
     for (const md of res.medals) news.push(`${MEDAL[md.level]} ${md.a.name} · +${MEDAL_REWARD[md.level]} 🪙`);
+    if (this.trial && !ownedPaints().includes(this.trial)) news.unshift(`¿Te gustó la pintura ${PAINTS[this.trial].name}? <a href="#" id="o-keep" style="color:#ffd84a">Quedármela · 20 💠</a>`);
     $('o-news').innerHTML = news.slice(0, 4).join('<br>');
+    $('o-keep')?.addEventListener('click', (e) => { e.preventDefault(); this.showTienda(); });
+    $('b-again').textContent = this.pozo ? 'VOLVER AL POZO' : 'OTRA VEZ';
+    if (this.pozo) {
+      const a = this.pozo;
+      $('o-news').innerHTML = 'Enviando tu partida al Pozo…';
+      pozoFinish(a.attemptId, g.inputs, nube.name).then((r) => {
+        $('o-news').innerHTML = r.ok ? `💰 Pozo: ${r.score} puntos${r.record ? ' · ¡tu mejor de la semana!' : ''}${r.rank ? ` · lugar #${r.rank}` : ''}` : '⚠ ' + (r.error || 'No contó');
+      }).catch((e) => { $('o-news').textContent = '⚠ ' + e.message; });
+    }
     writeSave(s);
     $('o-lines').innerHTML = [
       ['Puntos', sc], ['Pasaje entregado', g.delivered + (g.pax ? ` <small>(${g.pax} sin entregar)</small>` : '')],

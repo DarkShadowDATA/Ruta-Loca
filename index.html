@@ -73,6 +73,21 @@
   .ach .md .off { filter: grayscale(1) brightness(.4); }
   .ach b { font-size: 28px; display: block; }
   .ach small { font: 700 22px system-ui, sans-serif; color: #e9e6dc; }
+  .cards { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; width: 600px; }
+  .card { pointer-events: auto; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 14px; background: linear-gradient(90deg,#3a1d5c,#1b1410); border: 4px solid #ffd84a; border-radius: 22px; padding: 12px 20px; font: 700 24px system-ui, sans-serif; }
+  .card b { font: 400 30px "Arial Black", Impact, sans-serif; color: #ffd84a; }
+  .sec-t { font-size: 34px; color: #ffd84a; margin: 18px 0 10px; }
+  .shop { display: flex; align-items: center; gap: 16px; background: rgba(27,20,16,.88); border-radius: 22px; padding: 12px 18px; margin-bottom: 12px; font: 700 24px system-ui, sans-serif; }
+  .shop img { height: 120px; }
+  .shop .grow { flex: 1; }
+  .shop b { font: 400 30px "Arial Black", Impact, sans-serif; display: block; }
+  .shop .btn { font-size: 26px; padding: 12px 22px; margin: 0; box-shadow: 0 5px 0 #a8761a; min-width: 150px; }
+  .shop .btn[disabled] { background: #6b665c; box-shadow: 0 5px 0 #3e3a34; color: #ccc; }
+  .note { font: 700 22px system-ui, sans-serif; color: #e9e6dc; opacity: .85; margin: 8px 0 16px; }
+  .paints { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
+  .paints button { pointer-events: auto; border: 4px solid transparent; border-radius: 16px; background: #2a2420; padding: 4px; cursor: pointer; }
+  .paints button.on { border-color: #ffd84a; }
+  .paints img { height: 90px; display: block; }
   #toast { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); background: #1b1410; color: #ffd84a; border-radius: 26px; padding: 18px 34px; font-size: 36px; display: none; pointer-events: none; }
 </style>
 </head>
@@ -84,7 +99,9 @@
     <div class="rsel"><button class="arw" id="r-prev">◀</button><div class="ruta" id="r-card">RUTA 1<small>Ciudad de México</small></div><button class="arw" id="r-next">▶</button></div>
     <div class="stats"><div class="pill">🏆 <span id="m-best">0</span> m</div><div class="pill">🪙 <span id="m-coins">0</span></div></div>
     <button class="btn" id="b-play">¡JUGAR!</button>
-    <div class="row"><button class="btn sec" id="b-garage">🔧 Garaje</button><button class="btn sec" id="b-logros">🏅</button><button class="btn sec" id="b-stats">📊</button><button class="btn sec" id="b-sound">🔊</button></div>
+    <div class="row"><button class="btn sec" id="b-garage">🔧 Garaje</button><button class="btn sec" id="b-tienda">🛒 Tienda</button><button class="btn sec" id="b-pozo">💰 Pozo</button></div>
+    <div class="row"><button class="btn sec" id="b-logros">🏅</button><button class="btn sec" id="b-stats">📊</button><button class="btn sec" id="b-sound">🔊</button><button class="btn sec" id="b-acc">👤</button></div>
+    <div class="cards" id="m-cards"></div>
     <div class="mis" id="m-mis"></div>
     <div class="ver" id="ver"></div>
   </div>
@@ -110,6 +127,18 @@
   <div id="stats" class="scr shade" style="background: rgba(10,8,6,.88)">
     <div class="top"><button class="btn sec back" id="b-sback">◀</button><div>ESTADÍSTICAS</div><div style="width:90px"></div></div>
     <div class="lines" id="s-list" style="min-width:600px;margin-top:20px"></div>
+  </div>
+  <div id="tienda" class="scr shade" style="background: rgba(10,8,6,.9)">
+    <div class="top"><button class="btn sec back" id="b-tback">◀</button><div>TIENDA</div><div class="pill" style="font-size:30px">💠 <span id="t-shadow">—</span></div></div>
+    <div class="list" id="t-list"></div>
+  </div>
+  <div id="pozo" class="scr shade" style="background: rgba(10,8,6,.9)">
+    <div class="top"><button class="btn sec back" id="b-pback">◀</button><div>💰 RUTA DEL POZO</div><div style="width:90px"></div></div>
+    <div class="list" id="p-list"></div>
+  </div>
+  <div id="mercado" class="scr shade" style="background: rgba(10,8,6,.9)">
+    <div class="top"><button class="btn sec back" id="b-mback">◀</button><div>MERCADO</div><div class="pill" style="font-size:30px">💠 <span id="k-shadow">—</span></div></div>
+    <div class="list" id="k-list"></div>
   </div>
   <div id="pause" class="scr shade" style="justify-content:center"><div class="big" style="font-size:90px">PAUSA</div><div class="rec">Toca para seguir</div></div>
   <div id="toast"></div>
