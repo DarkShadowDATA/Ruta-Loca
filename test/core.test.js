@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, step, replay, autoDir, meters, score, coins, CFG, VEH_ORDER, vehicleStats, obstacles, LANES, laneX } from '../src/core.js';
+import { createGame, step, replay, autoDir, meters, score, coins, CFG, VEH_ORDER, vehicleStats, obstacles, LANES, laneX, ROUTE_ORDER } from '../src/core.js';
 
 function playAuto(seed, maxTicks = 60 * 240, opts = {}) {
   const g = createGame(seed, opts);
@@ -100,4 +100,36 @@ test('tope de 300 monedas (sin contar el Tráiler)', () => {
   assert.equal(coins(g), 300);
   g.bossCoins = 200;
   assert.equal(coins(g), 500);
+});
+
+test('rutas: mismo replay, nunca muro, el piloto aguanta y salen sus eventos', () => {
+  for (const ruta of ROUTE_ORDER) {
+    let total = 0; const all = {};
+    for (let seed = 1; seed <= 12; seed++) {
+      const g = playAuto(seed, 60 * 200, { ruta });
+      total += g.t;
+      for (const k in g.seen) all[k] = (all[k] || 0) + g.seen[k];
+      if (seed <= 3) {
+        const a = replay(seed, g.inputs, g.tick, { ruta });
+        assert.equal(a.score, score(g), `ruta ${ruta} semilla ${seed}`);
+      }
+      if (!g.alive && seed <= 4) console.log(`  ruta ${ruta} semilla ${seed}: chocó con ${g.crashKind} a ${meters(g)} m`);
+    }
+    console.log(`ruta ${ruta}: promedio ${(total / 12).toFixed(0)} s`, JSON.stringify(all));
+    assert.ok(total / 12 > 90, `ruta ${ruta}: promedio mayor a 90 s`);
+    // muro
+    for (let seed = 1; seed <= 6; seed++) {
+      const g = createGame(seed, { god: true, ruta });
+      while (g.tick < 60 * 160) {
+        step(g, autoDir(g));
+        if (g.tick % 3) continue;
+        const blocked = new Set();
+        for (const o of obstacles(g)) {
+          if (Math.abs(o.s - g.dist) > o.l / 2 + 60) continue;
+          for (let l = 0; l < LANES; l++) if (Math.abs(o.x - laneX(l)) < o.w / 2 + 20) blocked.add(l);
+        }
+        assert.ok(blocked.size < LANES, `muro ruta ${ruta} semilla ${seed} t=${g.t.toFixed(1)}`);
+      }
+    }
+  }
 });

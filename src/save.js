@@ -5,7 +5,8 @@ const KEY = 'rl_save_v1';
 const OLD = 'rl_save_v0';
 
 function blank() {
-  return { best: 0, bestScore: 0, runs: 0, coins: 0, owned: { combi: true }, sel: 'combi', upg: {}, sound: true, totalPax: 0, totalM: 0 };
+  return { best: 0, bestScore: 0, runs: 0, coins: 0, owned: { combi: true }, sel: 'combi', upg: {}, sound: true, totalPax: 0, totalM: 0,
+    ruta: 1, bestBy: {}, ach: {}, missions: null, totalNears: 0, bossWins: 0, coinsEarned: 0, fullLoads: 0, maxCombo: 0, bestM: 0, timePlayed: 0 };
 }
 
 export function loadSave() {
@@ -17,6 +18,8 @@ export function loadSave() {
   } catch { /* sin guardado: se juega igual */ }
   if (!VEHICLES[s.sel] || !s.owned[s.sel]) s.sel = 'combi';
   s.owned.combi = true;
+  if (!s.bestBy[1] && s.best) s.bestBy[1] = s.best;
+  if (!s.bestM) s.bestM = s.best | 0;
   for (const id of VEH_ORDER) s.upg[id] = Object.assign({ cupo: 0, agil: 0, iman: 0 }, s.upg[id] || {});
   return s;
 }

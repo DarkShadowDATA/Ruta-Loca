@@ -64,15 +64,33 @@ function upCap(v, n) { return n === 0 ? 0 : Math.max(n, Math.round(VEHICLES[v].c
 export const VEH = {
   sedan_rojo: { w: 88,  l: 168 }, sedan_azul: { w: 88,  l: 168 }, taxi: { w: 88, l: 168 },
   camioneta:  { w: 98,  l: 200 }, camion:     { w: 108, l: 260 }, moto: { w: 46, l: 112 },
+  tk_kei:     { w: 76,  l: 140 }, tk_taxi:    { w: 86,  l: 172 }, tk_camion: { w: 100, l: 230 }, tk_moto: { w: 44, l: 108 },
+  ny_taxi:    { w: 90,  l: 176 }, ny_suv:     { w: 98,  l: 196 }, ny_bus:    { w: 108, l: 260 },
+  bo_rickshaw:{ w: 70,  l: 118 }, bo_bus:     { w: 106, l: 250 }, bo_camion: { w: 104, l: 236 }, bo_moto: { w: 44, l: 108 },
 };
 const MAX_LEN = 260;
-const TRAFFIC = [
-  ['sedan_rojo', 22], ['sedan_azul', 22], ['taxi', 18],
-  ['camioneta', 16], ['camion', 12], ['moto', 10],
-];
-const TRAFFIC_TOTAL = TRAFFIC.reduce((a, t) => a + t[1], 0);
+// Rutas (fases 8 y 9). Cada una cambia el tráfico, los eventos y cuánto paga.
+//  events: tipos que pueden salir (repetir un tipo = sale más seguido).
+//  crosser: lo que cruza la calle (perro o vaca). cutIn: probabilidad de que un vehículo se cierre de carril.
+export const ROUTES = {
+  1: { name: 'Ciudad de México', unlock: 0, coinMul: 1,
+       traffic: [['sedan_rojo', 22], ['sedan_azul', 22], ['taxi', 18], ['camioneta', 16], ['camion', 12], ['moto', 10]],
+       events: ['tianguis', 'lluvia', 'perro', 'baches'], block: 'tianguis', crosser: 'perro', cutIn: 0, density: 1 },
+  2: { name: 'Tokio de noche', unlock: 2500, coinMul: 1.2,
+       traffic: [['tk_kei', 30], ['tk_taxi', 24], ['tk_camion', 14], ['tk_moto', 14], ['sedan_azul', 18]],
+       events: ['tren', 'lluvia', 'lluvia', 'obras'], block: 'obras', crosser: 'perro', cutIn: 0, density: 1 },
+  3: { name: 'Nueva York', unlock: 2500, coinMul: 1.35,
+       traffic: [['ny_taxi', 34], ['ny_suv', 22], ['ny_bus', 12], ['sedan_rojo', 16], ['moto', 8]],
+       events: ['obras', 'vapor', 'lluvia', 'baches'], block: 'obras', crosser: 'perro', cutIn: 0.45, density: 1 },
+  4: { name: 'Bombay', unlock: 2500, coinMul: 1.5,
+       traffic: [['bo_rickshaw', 34], ['bo_bus', 14], ['bo_camion', 14], ['bo_moto', 22], ['sedan_azul', 10]],
+       events: ['mercado', 'vaca', 'lluvia', 'baches', 'vaca'], block: 'mercado', crosser: 'vaca', cutIn: 0.2, density: 1.25 },
+};
+export const ROUTE_ORDER = [1, 2, 3, 4];
+const CROSSERS = { perro: { w: 54, l: 40, speed: 260 }, vaca: { w: 120, l: 64, speed: 150 } };
 const TRAILER = { l: 620 };
-const DOG = { w: 54, l: 40, speed: 260 };
+const DOG = CROSSERS.perro;
+const TRAIN = { l: 120, len: 1500, speed: 650 };
 const BACHE = { w: 56, l: 44 };
 
 export function laneX(lane) { return ROAD_X + LANE_W * (lane + 0.5); }
@@ -121,6 +139,7 @@ export function vehicleStats(id = 'combi', upg = {}) {
 
 export function createGame(seed, opts = {}) {
   const P = vehicleStats(opts.veh, opts.upg);
+  const ruta = ROUTES[opts.ruta] ? +opts.ruta : 1;
   const g = {
     seed: seed >>> 0, rs: seed >>> 0, god: !!opts.god,
     P, tick: 0, t: 0, dist: 0, speed: CFG.speed0,
@@ -133,8 +152,10 @@ export function createGame(seed, opts = {}) {
     shield: P.shield, invul: 0, bossCoins: 0, bossWins: 0,
     feats: [],            // paradas, terminales, eventos y jefes ya planeados (en orden de distancia)
     nextStop: 0, nextTerm: CFG.terminalEvery, nextEvent: CFG.eventFrom, lastEvent: '', nextBoss: CFG.bossEvery,
-    rain: 0, boss: null, dog: null, baches: [],
+    rain: 0, boss: null, dog: null, baches: [], train: null, fog: 0,
+    ruta, R: ROUTES[ruta], maxCombo: 0, fullLoads: 0,
   };
+  g.trafficTotal = g.R.traffic.reduce((a, t) => a + t[1], 0);
   g.nextStop = CFG.stopEvery + rint(g, CFG.stopVar * 2) - CFG.stopVar;
   planFeatures(g);
   spawnRow(g, CFG.firstRow, false);
@@ -162,19 +183,22 @@ function planFeatures(g) {
   while (g.nextEvent < horizon) {
     let s = g.nextEvent;
     if (inBoss(g, s)) s = g.feats.find((f) => f.type === 'boss' && s > f.s - 700 && s < f.end + 300).end + 800;
-    const kinds = ['tianguis', 'lluvia', 'perro', 'baches'].filter((k) => k !== g.lastEvent);
-    const type = kinds[rint(g, kinds.length)];
-    const f = { type, s, warned: false, done: false };
+    const kinds = g.R.events.filter((k) => k !== g.lastEvent);
+    let type = kinds[rint(g, kinds.length)];
+    if (type === 'obras' || type === 'mercado') type = 'tianguis';          // misma regla, otro dibujo
+    if (type === 'vaca') type = 'perro';
+    const f = { type, s, warned: false, done: false, look: type === 'tianguis' ? g.R.block : (type === 'perro' ? g.R.crosser : type) };
     if (type === 'tianguis') {
       const n = 2 + rint(g, 2), left = rnd(g) < 0.5;
       f.blocks = []; for (let i = 0; i < n; i++) f.blocks.push(left ? i : RIGHT - i);
       f.len = CFG.tianguisLen;
-      if (inBoss(g, s + f.len)) { f.type = 'lluvia'; delete f.blocks; }
+      if (inBoss(g, s + f.len)) { f.type = 'lluvia'; f.look = 'lluvia'; delete f.blocks; }
     }
     if (f.type === 'baches') { f.len = CFG.bacheLen; spawnBaches(g, f); }
-    if (f.type === 'perro') { f.fromLeft = rnd(g) < 0.5; f.lead = 1.0 + rnd(g) * 0.9; }
+    if (f.type === 'perro') { f.fromLeft = rnd(g) < 0.5; f.cr = CROSSERS[f.look]; f.lead = (f.look === 'vaca' ? 1.6 : 1.0) + rnd(g) * 0.9; }
+    if (f.type === 'tren') { f.right = rnd(g) < 0.5; f.free = 1 + rint(g, 2); }
     g.feats.push(f);
-    g.lastEvent = f.type;
+    g.lastEvent = f.look;
     g.nextEvent = s + (f.len || 0) + CFG.eventMin + rint(g, CFG.eventMax - CFG.eventMin);
   }
   while (g.nextTerm < horizon) {
@@ -206,7 +230,7 @@ function featAt(g, m) {   // qué pasa en el punto m de la calle
     if (f.type === 'tianguis' && m > f.s - 1400 && m < f.s + f.len + 250) {
       r.free = []; for (let l = 0; l < LANES; l++) if (!f.blocks.includes(l)) r.free.push(l);
     }
-    if (f.type === 'perro' && Math.abs(m - f.s) < 560) r.dog = true;
+    if ((f.type === 'perro' || f.type === 'tren') && Math.abs(m - f.s) < 620) r.dog = true;
   }
   return r;
 }
@@ -254,16 +278,18 @@ function fillRows(g) {
 }
 
 function pickType(g) {
-  let r = rint(g, TRAFFIC_TOTAL), type = TRAFFIC[0][0];
-  for (const [name, wgt] of TRAFFIC) { if (r < wgt) { type = name; break; } r -= wgt; }
+  const T = g.R.traffic;
+  let r = rint(g, g.trafficTotal), type = T[0][0];
+  for (const [name, wgt] of T) { if (r < wgt) { type = name; break; } r -= wgt; }
   return type;
 }
 function spawnRow(g, s, useFeat, meet = 0, f = null) {
   const t = g.t;
   let n = 1;
   if (g.rows >= 2) {
-    const p3 = Math.max(0, Math.min(0.45, (t - 20) / 80));
-    const p2 = Math.max(0.3, Math.min(0.85, 0.3 + t / 55));
+    const dn = g.R.density;
+    const p3 = Math.max(0, Math.min(0.45 * dn, (t - 20) / 80 * dn));
+    const p2 = Math.max(0.3, Math.min(0.85, (0.3 + t / 55) * dn));
     if (rnd(g) < p3) n = 3; else if (rnd(g) < p2) n = 2;
   }
   const lanes = [];
@@ -284,6 +310,18 @@ function spawnRow(g, s, useFeat, meet = 0, f = null) {
     const jit = rint(g, CFG.jitter * 2 + 1) - CFG.jitter;
     g.vehicles.push({ id: g.nextId++, type: pickType(g), lane: RIGHT, x: laneX(RIGHT) + 8, s: meet + jit, adv: 0, parked: true });
   }
+  // se cierran de carril: solo hacia un carril que esta fila deja vacío y que no es el libre
+  if (useFeat && g.R.cutIn > 0 && g.t > 8) {
+    const taken = new Set(g.vehicles.filter((v) => Math.abs(v.s - s) < 300 || (v.parked && Math.abs(v.s - meet) < 300)).map((v) => v.lane));
+    for (const v of g.vehicles) {
+      if (v.parked || v.cut || Math.abs(v.s - s) > CFG.jitter + 1 || VEH[v.type].l > 210) continue;
+      if (rnd(g) >= g.R.cutIn) continue;
+      const opts = [v.lane - 1, v.lane + 1].filter((l) => l >= 0 && l < LANES && l !== g.safe && !taken.has(l) && !(f && f.free && !f.free.includes(l)) && !(f && f.stop && l === RIGHT));
+      if (!opts.length) continue;
+      const to = opts[rint(g, opts.length)];
+      v.cut = { to, at: 520 + rint(g, 260), go: false }; taken.add(to);
+    }
+  }
   g.lastRowS = s;
   g.rows++;
 }
@@ -294,7 +332,7 @@ export function obstacles(g) {
   for (const v of g.vehicles) {
     if (v.gone) continue;
     const d = VEH[v.type];
-    out.push({ kind: 'veh', id: v.id, ref: v, x: v.x, s: v.s, w: d.w * CFG.hit, l: d.l * CFG.hit });
+    out.push({ kind: 'veh', id: v.id, ref: v, x: v.x, s: v.s, w: d.w * CFG.hit, l: d.l * CFG.hit, cut: v.cut && !v.cut.done ? v.cut : null });
   }
   for (const f of g.feats) {
     if (f.type === 'tianguis' && f.s + f.len > g.dist - 300 && f.s < g.dist + 2200) {
@@ -307,7 +345,8 @@ export function obstacles(g) {
     const b = g.boss;
     out.push({ kind: 'trailer', id: -2, x: b.x, s: g.dist + b.off, w: LANE_W * 3 - 10, l: TRAILER.l * CFG.hit });
   }
-  if (g.dog && g.dog.active) out.push({ kind: 'dog', id: -3, x: g.dog.x, s: g.dog.s, w: DOG.w * CFG.hit, l: DOG.l * CFG.hit });
+  if (g.dog && g.dog.active) out.push({ kind: g.dog.f.look === 'vaca' ? 'vaca' : 'dog', id: -3, x: g.dog.x, s: g.dog.s, w: g.dog.cr.w * CFG.hit, l: g.dog.cr.l * CFG.hit, vx: g.dog.vx });
+  if (g.train) { const tr = g.train; out.push({ kind: 'tren', id: -4, x: tr.x, s: tr.s, w: TRAIN.len, l: TRAIN.l * CFG.hit, vx: tr.vx }); }
   return out;
 }
 
@@ -328,6 +367,7 @@ export function step(g, dir) {
   g.dist = cum(g.tick);
   if (g.invul > 0) g.invul -= DT;
   if (g.rain > 0) { g.rain -= DT; if (g.rain <= 0) g.events.push('rain_end'); }
+  if (g.fog > 0) g.fog -= DT;
 
   const tx = laneX(g.lane), dx = laneSpeedNow(g) * DT;
   if (g.x < tx) g.x = Math.min(tx, g.x + dx); else if (g.x > tx) g.x = Math.max(tx, g.x - dx);
@@ -336,7 +376,18 @@ export function step(g, dir) {
   g.lastRowS += CFG.trafficSpeed * DT;
   const vs = g.vehicles;
   let w = 0;
-  for (let i = 0; i < vs.length; i++) { const v = vs[i]; v.s += v.adv; if (v.s >= g.dist - 420) vs[w++] = v; }
+  for (let i = 0; i < vs.length; i++) {
+    const v = vs[i]; v.s += v.adv;
+    if (v.cut && !v.cut.done) {
+      if (!v.cut.go && v.s - g.dist < v.cut.at) { v.cut.go = true; g.events.push('cut'); }
+      if (v.cut.go) {
+        const tx = laneX(v.cut.to), d = 380 * DT;
+        v.x = v.x < tx ? Math.min(tx, v.x + d) : Math.max(tx, v.x - d);
+        if (v.x === tx) { v.lane = v.cut.to; v.cut.done = true; }
+      }
+    }
+    if (v.s >= g.dist - 420) vs[w++] = v;
+  }
   vs.length = w;
   if (g.baches.length && g.baches[0].s < g.dist - 400) g.baches = g.baches.filter((b) => b.s >= g.dist - 400);
 
@@ -378,13 +429,13 @@ function features(g, prev) {
         f.done = true;
         if (inRight(g) && g.pax < g.P.cap) {
           const k = Math.min(g.P.cap - g.pax, 2 + rint(g, 3));
-          g.pax += k; g.boarded += k; g.events.push('board:' + k);
+          g.pax += k; g.boarded += k; g.stopsBoarded = (g.stopsBoarded | 0) + 1; g.events.push('board:' + k);
         } else g.events.push('stop_miss');
       }
     } else if (f.type === 'terminal') {
       if (prev < f.s + f.len / 2 && g.dist >= f.s + f.len / 2) {
         f.done = true;
-        if (inRight(g) && g.pax > 0) { const k = g.pax; g.delivered += k; g.pax = 0; g.events.push('deliver:' + k); }
+        if (inRight(g) && g.pax > 0) { const k = g.pax; g.delivered += k; g.pax = 0; if (k >= g.P.cap) g.fullLoads++; g.events.push('deliver:' + k); }
         else g.events.push('term_miss');
       }
     } else if (f.type === 'lluvia') {
@@ -392,11 +443,30 @@ function features(g, prev) {
     } else if (f.type === 'perro') {
       if (!g.dog && g.tick >= tickAtDist(f.s) - Math.round(f.lead / DT)) {
         const x0 = f.fromLeft ? 20 : W - 20;
-        g.dog = { active: true, s: f.s, x: x0, vx: (f.fromLeft ? 1 : -1) * DOG.speed, f };
+        g.dog = { active: true, s: f.s, x: x0, vx: (f.fromLeft ? 1 : -1) * f.cr.speed, f, cr: f.cr };
       }
       if (g.dog && g.dog.f === f) {
         g.dog.x += g.dog.vx * DT;
         if (g.dog.x < -60 || g.dog.x > W + 60 || g.dog.s < g.dist - 500) { g.dog = null; f.done = true; }
+      }
+    } else if (f.type === 'vapor') {
+      if (g.dist >= f.s) { f.done = true; g.fog = 7; g.events.push('fog'); }
+    } else if (f.type === 'tren') {
+      // el tren cruza: cuando llegas, ya pasó por un lado y deja libres 1 o 2 carriles
+      const ta = tickAtDist(f.s);
+      if (!g.train && !f.started && g.tick >= ta - Math.round(2.6 / DT)) {
+        f.started = true;
+        const vx = (f.right ? 1 : -1) * TRAIN.speed;
+        // la cola debe ir ya más allá del carril libre durante todo el rato en que la combi lo cruza
+        const half = ((g.P.l + TRAIN.l) * CFG.hit / 2) / speedAt(ta);
+        const m = 30 + TRAIN.speed * half;
+        const tail = f.right ? ROAD_X + LANE_W * f.free + m : ROAD_X + LANE_W * (LANES - f.free) - m;
+        g.train = { f, s: f.s, vx, tail0: tail, ta, x: 0 };
+      }
+      if (g.train && g.train.f === f) {
+        const tr = g.train, tail = tr.tail0 + tr.vx * (g.tick - tr.ta) * DT;
+        tr.x = tail + Math.sign(tr.vx) * TRAIN.len / 2;          // centro del tren
+        if ((tr.vx > 0 && tail > W + 60) || (tr.vx < 0 && tail < -60) || tr.s < g.dist - 400) { g.train = null; f.done = true; }
       }
     } else if (f.type === 'tianguis' || f.type === 'baches') {
       if (g.dist > f.s + f.len + 400) f.done = true;
@@ -468,7 +538,7 @@ function nearMisses(g) {
           g.combo = g.t - g.lastNear < CFG.comboWindow ? Math.min(5, g.combo + 1) : 1;
           g.lastNear = g.t;
           const pts = CFG.nearPts * g.combo * g.P.nearMul;
-          g.nearPts += pts; g.nears++;
+          g.nearPts += pts; g.nears++; g.maxCombo = Math.max(g.maxCombo, g.combo);
           g.events.push('near:' + g.combo + ':' + pts);
         }
       }
@@ -486,7 +556,7 @@ function nearMisses(g) {
 export function meters(g) { return Math.floor(g.dist / PX_PER_M); }
 export function score(g) { return meters(g) + g.nearPts + g.delivered * CFG.paxPts; }
 export function coins(g) {
-  const base = Math.floor((g.delivered * CFG.paxCoins + Math.floor(meters(g) / 100) * CFG.coinsPer100m) * g.P.coinMul);
+  const base = Math.floor((g.delivered * CFG.paxCoins + Math.floor(meters(g) / 100) * CFG.coinsPer100m) * g.P.coinMul * g.R.coinMul);
   return Math.min(CFG.coinCap, base) + g.bossCoins;
 }
 
@@ -510,6 +580,7 @@ export function autoDir(g) {
   const clear = [], side = [];
   for (let l = 0; l < LANES; l++) { clear.push(1e9); side.push(false); }
   for (const o of obstacles(g)) {
+    if (o.vx) continue;                       // lo que cruza de lado se calcula abajo, donde va a estar
     const ds = o.s - g.dist;
     const half = (pl + o.l) / 2;
     for (let l = 0; l < LANES; l++) {
@@ -518,15 +589,20 @@ export function autoDir(g) {
       if (ds > -half && Math.max(0, ds - half) < clear[l]) clear[l] = Math.max(0, ds - half);
     }
   }
-  // el perro cruza: ver en qué carril va a estar cuando lleguemos
-  if (g.dog && g.dog.active) {
-    const ds = g.dog.s - g.dist;
-    if (ds > -60) {
-      const ta = Math.max(0, ds / g.speed);
-      for (const dt of [0, ta * 0.5, ta, ta + 0.15]) {
-        const px = g.dog.x + g.dog.vx * dt;
-        for (let l = 0; l < LANES; l++) if (Math.abs(px - laneX(l)) < (pw + DOG.w) / 2 + 10) clear[l] = Math.min(clear[l], Math.max(0, ds - 60));
-      }
+  // lo que se mueve de lado (perro, vaca, tren, taxis que se cierran): ver dónde va a estar cuando lleguemos
+  for (const o of obstacles(g)) {
+    const vx = o.vx || 0, cut = o.cut;
+    if (!vx && !cut) continue;
+    const ds = o.s - g.dist;
+    if (ds < -(pl + o.l) / 2 || ds > 2200) continue;
+    const rel = Math.max(1, g.speed - (o.kind === 'veh' ? CFG.trafficSpeed : 0));
+    const ta = Math.max(0, ds / rel), half = ((pl + o.l) / 2) / rel;
+    for (let k = -1; k <= 1; k += 0.5) {
+      const dt = ta + half * k;
+      if (dt < 0) continue;
+      let px = o.x + vx * dt;
+      if (cut) { const tx = laneX(cut.to); const willGo = cut.go || ds - CFG.trafficSpeed * 0 < cut.at + 200; if (willGo) px = tx; }
+      for (let l = 0; l < LANES; l++) if (Math.abs(px - laneX(l)) < (pw + o.w) / 2 + 10) clear[l] = Math.min(clear[l], Math.max(0, ds - (pl + o.l) / 2));
     }
   }
   // el Tráiler se adelanta y regresa: ir al carril que va a dejar libre
@@ -562,4 +638,4 @@ function wantRight(g) {
 export function visibleFeatures(g, from, to) {
   return g.feats.filter((f) => f.s + (f.len || 0) > from && f.s < to);
 }
-export { TRAILER, DOG, BACHE };
+export { TRAILER, DOG, BACHE, TRAIN, CROSSERS };

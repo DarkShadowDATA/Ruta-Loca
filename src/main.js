@@ -4,14 +4,15 @@
 // cambiarla por la imagen final no toca nada más.
 import Phaser from 'phaser';
 import {
-  W, H, DT, LANES, ROAD_X, LANE_W, PLAYER_Y, VEH, CFG, RIGHT, VEHICLES, VEH_ORDER, UPGRADES, TRAILER,
-  createGame, step, meters, score, coins, autoDir, laneX, vehicleStats, visibleFeatures,
+  W, H, DT, LANES, ROAD_X, LANE_W, PLAYER_Y, VEH, CFG, RIGHT, VEHICLES, VEH_ORDER, UPGRADES, TRAILER, TRAIN, CROSSERS,
+  ROUTES, ROUTE_ORDER, createGame, step, meters, score, coins, autoDir, laneX, vehicleStats, visibleFeatures,
 } from './core.js';
+import { dailyMissions, addRun, ACHIEVEMENTS, MEDAL, MEDAL_REWARD, statValue, medals, routeOpen, checkAchievements } from './progreso.js';
 import { loadSave, writeSave, buyVehicle, buyUpgrade, upgradeCost } from './save.js';
 import * as S from './sound.js';
 import { dsTrack } from './dsev.js';
 
-const VERSION = '0.4.0';
+const VERSION = '0.6.0';
 let Q;
 try { Q = new URLSearchParams(location.search); } catch { Q = new URLSearchParams(''); }
 const P = {
@@ -19,10 +20,19 @@ const P = {
   seed: Q.has('seed') ? (parseInt(Q.get('seed'), 10) >>> 0) : null,
   t: parseFloat(Q.get('t') || '0') || 0,
   speed: Math.max(0.1, parseFloat(Q.get('speed') || '1') || 1),
-  veh: Q.get('veh'), ruta: parseInt(Q.get('ruta') || '1', 10) || 1, menu: Q.get('menu'),
+  veh: Q.get('veh'), ruta: parseInt(Q.get('ruta') || '0', 10) || 0, menu: Q.get('menu'),
 };
 
-const TCOL = { sedan_rojo: 0xd8432e, sedan_azul: 0x2f76d2, taxi: 0xf2c230, camioneta: 0x4a9a52, camion: 0x9a9fa8, moto: 0x30343c };
+const TCOL = { sedan_rojo: 0xd8432e, sedan_azul: 0x2f76d2, taxi: 0xf2c230, camioneta: 0x4a9a52, camion: 0x9a9fa8, moto: 0x30343c,
+  tk_kei: 0xf4f1e6, tk_taxi: 0x2b2f3a, tk_camion: 0x2f76d2, tk_moto: 0x8a1f2c, ny_taxi: 0xf6c614, ny_suv: 0x1d1f24, ny_bus: 0x2f76d2,
+  bo_rickshaw: 0x2e9b4f, bo_bus: 0xd8432e, bo_camion: 0xf28a1f, bo_moto: 0x6b2fa0 };
+// Cómo se ve cada ruta (relleno de código hasta el arte final).
+const LOOK = {
+  1: { walk: 0x8f8a80, slab: 0x7d786f, road: 0x3a3d44, edge: 0xf2c230, line: 0xe9e6dc, deco: 'jacaranda', night: 0 },
+  2: { walk: 0x3b3f52, slab: 0x2e3242, road: 0x22242c, edge: 0xff4fa0, line: 0xd8dcea, deco: 'neon', night: 0.28 },
+  3: { walk: 0x9a9a9a, slab: 0x858585, road: 0x2f3136, edge: 0xf2c230, line: 0xf4f4f4, deco: 'ny', night: 0 },
+  4: { walk: 0xc2a27a, slab: 0xae8e66, road: 0x4a4640, edge: 0xffffff, line: 0xf2e6c8, deco: 'palma', night: 0 },
+};
 const OUT = 0x2a1c12, GLASS = 0x9fd8ef;
 const FONT = '"Arial Black", "Arial Bold", Impact, system-ui, sans-serif';
 const $ = (id) => document.getElementById(id);
@@ -33,6 +43,8 @@ class Juego extends Phaser.Scene {
   create() {
     this.save = loadSave();
     if (P.veh && VEHICLES[P.veh]) { this.save.owned[P.veh] = true; this.save.sel = P.veh; }
+    if (P.ruta && ROUTES[P.ruta]) { this.save.openRoutes = { ...(this.save.openRoutes || {}), [P.ruta]: true }; this.save.ruta = P.ruta; }
+    if (!routeOpen(this.save, this.save.ruta)) this.save.ruta = 1;
     S.setSound(this.save.sound);
     this.makeTextures();
 
@@ -68,7 +80,11 @@ class Juego extends Phaser.Scene {
     if (P.go) this.start();
     else if (P.menu === 'garaje') this.showGarage();
     else this.showMenu();
-    if (P.dev) window.__rl = this;
+    if (P.dev) {
+      window.__rl = this;
+      // pruebas: adelanta la partida (con piloto) hasta que se cumpla cond(g), máx. n pasos
+      window.__rlTo = (cond, n = 60 * 400) => { const g = this.g; for (let i = 0; i < n && g.alive && !cond(g); i++) { step(g, autoDir(g)); for (const e of g.events) if (e.startsWith('rain') || e === 'fog') this.onEvent(e); } return cond(g); };
+    }
   }
 
   // ---------- texturas hechas con código ----------
@@ -93,6 +109,19 @@ class Juego extends Phaser.Scene {
     g.fillStyle(0x15171b);
     for (const sx of [-1, 1]) for (const sy of [-1, 1]) g.fillRoundedRect(cx + sx * (w / 2 - 4) - 7, cy + sy * (l / 2 - Math.min(38, l * 0.22)) - 17, 14, 34, 5);
     const body = { combi: 0xf4f1e6, vocho: 0x7cc6e8, micro: 0x3f9b5a, taxi: 0xff8fb8, guajolotero: 0x2f6fc0 }[type] ?? TCOL[type] ?? 0xcccccc;
+    if (type.endsWith('_moto')) {
+      R(-9, -l / 2, 18, 30, 6, 0x15171b); R(-9, l / 2 - 30, 18, 30, 6, 0x15171b);
+      R(-14, -l / 2 + 18, 28, l - 36, 10, OUT); R(-11, -l / 2 + 21, 22, l - 42, 8, body);
+      g.fillStyle(OUT); g.fillCircle(cx, cy - 6, 15); g.fillStyle(0xf4f1e6); g.fillCircle(cx, cy - 6, 12);
+      return;
+    }
+    if (type === 'bo_rickshaw') {
+      g.fillStyle(0x15171b); g.fillRoundedRect(cx - 9, cy - l / 2, 18, 26, 6); g.fillRoundedRect(cx - w / 2 - 2, cy + l / 2 - 34, 14, 30, 5); g.fillRoundedRect(cx + w / 2 - 12, cy + l / 2 - 34, 14, 30, 5);
+      R(-w / 2, -l / 2 + 12, w, l - 14, 22, OUT); R(-w / 2 + 5, -l / 2 + 17, w - 10, l - 24, 18, body);
+      R(-w / 2 + 6, -l / 2 + 34, w - 12, l - 46, 16, 0xf2c230);
+      R(-w / 2 + 14, -l / 2 + 20, w - 28, 16, 6, GLASS);
+      return;
+    }
     const rr = type === 'vocho' ? Math.min(w, l) * 0.42 : 18;
     R(-w / 2, -l / 2, w, l, rr, OUT); R(-w / 2 + 5, -l / 2 + 5, w - 10, l - 10, rr - 4, body);
     if (type === 'combi') {
@@ -111,13 +140,20 @@ class Juego extends Phaser.Scene {
       const loads = [[0xd8432e, 0.2], [0xf2c230, 0.38], [0x6f8a3a, 0.55], [0xf4f1e6, 0.7]];
       for (const [c, k] of loads) R(-w / 2 + 18, -l / 2 + l * k, w - 36, 26, 8, c);
       g.fillStyle(0xffffff); g.fillCircle(cx + 18, cy + l * 0.32, 8); g.fillStyle(0xd8432e); g.fillCircle(cx + 22, cy + l * 0.32 - 6, 3);
-    } else if (type === 'camion') {
+    } else if (type === 'ny_bus' || type === 'bo_bus') {
+      R(-w / 2 + 12, -l / 2 + 12, w - 24, 26, 8, GLASS);
+      R(-w / 2 + 12, -l / 2 + 50, w - 24, l - 70, 8, type === 'ny_bus' ? 0xf4f4f4 : 0xf2c230);
+      if (type === 'bo_bus') { for (let y = -l / 2 + 60; y < l / 2 - 30; y += 40) R(-w / 2 + 12, y, w - 24, 10, 0, [0x2e9b4f, 0x2f76d2, 0xff5fa2][((y + 999) / 40 | 0) % 3]); }
+      else for (let y = -l / 2 + 70; y < l / 2 - 30; y += 36) R(-w / 2 + 18, y, w - 36, 5, 2, 0xb0b5bd);
+    } else if (type === 'camion' || type.endsWith('_camion')) {
       R(-w / 2 + 5, -l / 2 + 5, w - 10, 62, 12, 0xd8432e); R(-w / 2 + 14, -l / 2 + 14, w - 28, 22, 6, GLASS);
       R(-w / 2 + 10, -l / 2 + 76, w - 20, l - 90, 4, 0xc3c7cf);
       for (let y = -l / 2 + 100; y < l / 2 - 20; y += 34) R(-w / 2 + 12, y, w - 24, 3, 0, 0x8a8f99);
     } else {
       R(-w / 2 + 13, -l / 2 + 40, w - 26, 26, 7, GLASS); R(-w / 2 + 15, l / 2 - 52, w - 30, 18, 6, GLASS, 0.85);
       R(-w / 2 + 14, -l / 2 + 70, w - 28, l - 128, 8, 0xffffff, 0.2);
+      if (type === 'ny_taxi') { R(-w / 2 + 5, -6, w - 10, 12, 0, OUT); for (let x = -w / 2 + 5; x < w / 2 - 10; x += 14) R(x, -6, 7, 6, 0, 0xffffff); R(-14, -30, 28, 14, 3, OUT); R(-10, -27, 20, 8, 2, 0xffffff); }
+      if (type === 'tk_taxi') { R(-12, -10, 24, 14, 3, 0xf6c614); }
       if (type === 'taxi') { R(-w / 2 + 5, -l / 2 + 5, w - 10, 30, 12, 0xffffff, 0.0); R(-w / 2 + 14, -l / 2 + 70, w - 28, l - 128, 8, 0xffffff, 0.75); R(-14, -8, 28, 16, 3, OUT); R(-10, -4, 20, 8, 2, 0xffffff); }
       if (type === 'camioneta') R(-w / 2 + 12, 10, w - 24, l / 2 - 24, 6, OUT, 0.35);
     }
@@ -129,7 +165,7 @@ class Juego extends Phaser.Scene {
   newGame() {
     const seed = P.seed != null ? P.seed : ((Math.random() * 4294967296) >>> 0);
     const id = this.save.sel;
-    this.g = createGame(seed, { god: P.god, veh: id, upg: this.save.upg[id] });
+    this.g = createGame(seed, { god: P.god, veh: id, upg: this.save.upg[id], ruta: this.save.ruta });
     this.player.setTexture('veh_' + this.g.P.id);
     this.queue.length = 0; this.acc = 0; this.sparks.length = 0;
     this.crash = null; this.tilt = 0; this.slow = 0; this.warnT = 0; this.popT = 0; this.knock.setVisible(false);
@@ -200,20 +236,34 @@ class Juego extends Phaser.Scene {
     click('b-ogarage', () => this.showGarage());
     click('b-menu', () => this.showMenu());
     click('b-gback', () => this.showMenu());
+    click('b-logros', () => this.showLogros());
+    click('b-stats', () => this.showStats());
+    click('b-lback', () => this.showMenu());
+    click('b-sback', () => this.showMenu());
+    click('r-prev', () => this.pickRoute(-1));
+    click('r-next', () => this.pickRoute(1));
     click('b-sound', () => { this.save.sound = !this.save.sound; S.setSound(this.save.sound); writeSave(this.save); this.showMenu(); });
     $('pause').addEventListener('click', () => { this.paused = false; this.screen(null); });
     $('ver').textContent = 'prototipo ' + VERSION;
   }
 
   screen(id) {
-    for (const s of ['menu', 'over', 'garage', 'pause']) $(s).classList.toggle('on', s === id);
+    for (const s of ['menu', 'over', 'garage', 'pause', 'logros', 'stats']) $(s).classList.toggle('on', s === id);
   }
 
   showMenu() {
     this.mode = 'menu'; this.modeT = 0; S.engineStop(); S.rainSound(false);
     this.player.setTexture('veh_' + this.save.sel);
-    $('m-best').textContent = this.save.best; $('m-coins').textContent = this.save.coins;
-    $('b-sound').textContent = this.save.sound ? '🔊' : '🔇';
+    const s = this.save, r = s.ruta, R = ROUTES[r], open = routeOpen(s, r);
+    $('m-best').textContent = s.bestBy?.[r] | 0; $('m-coins').textContent = s.coins;
+    $('b-sound').textContent = s.sound ? '🔊' : '🔇';
+    const prev = ROUTE_ORDER[ROUTE_ORDER.indexOf(r) - 1];
+    $('r-card').className = 'ruta' + (open ? '' : ' lock');
+    $('r-card').innerHTML = `RUTA ${r}${R.coinMul > 1 ? ` · +${Math.round((R.coinMul - 1) * 100)} % 🪙` : ''}<small>${open ? R.name : `🔒 ${R.name}: llega a ${R.unlock} m en ${ROUTES[prev].name}`}</small>`;
+    $('r-prev').disabled = r === ROUTE_ORDER[0]; $('r-next').disabled = r === ROUTE_ORDER[ROUTE_ORDER.length - 1];
+    $('b-play').disabled = !open; $('b-play').style.opacity = open ? 1 : 0.4;
+    const ms = dailyMissions(s); writeSave(s);
+    $('m-mis').innerHTML = '<h4>Misiones de hoy</h4>' + ms.map((m) => `<div class="mi${m.done ? ' done' : ''}"><span>${m.done ? '✔ ' : ''}${m.def.text(m.def.n)} <small>· ${m.def.reward} 🪙</small></span><span class="bar"><i style="width:${Math.min(100, (m.p / m.def.n) * 100)}%"></i></span></div>`).join('');
     this.screen('menu');
   }
 
@@ -250,6 +300,36 @@ class Juego extends Phaser.Scene {
     for (const b of $('det').querySelectorAll('[data-up]')) b.addEventListener('click', () => { if (buyUpgrade(s, id, b.dataset.up)) S.sfx('buy'); else S.sfx('no'); this.showGarage(id); });
     this.player.setTexture('veh_' + s.sel);
     this.screen('garage');
+  }
+
+  pickRoute(d) {
+    const i = ROUTE_ORDER.indexOf(this.save.ruta) + d;
+    if (i < 0 || i >= ROUTE_ORDER.length) return;
+    this.save.ruta = ROUTE_ORDER[i];
+    if (routeOpen(this.save, this.save.ruta)) writeSave(this.save);
+    this.showMenu();
+  }
+
+  showLogros() {
+    const s = this.save;
+    const got = checkAchievements(s); if (got.length) { writeSave(s); this.toast(`${MEDAL[got[0].level]} +${got.reduce((a, x) => a + MEDAL_REWARD[x.level], 0)} 🪙`); }
+    $('l-count').textContent = `${medals(s)} / ${ACHIEVEMENTS.length * 3} 🏅`;
+    $('l-list').innerHTML = ACHIEVEMENTS.map((a) => {
+      const have = s.ach?.[a.id] | 0, v = statValue(s, a.stat), next = a.lv[Math.min(2, have)];
+      const md = MEDAL.map((e, i) => `<span class="${i < have ? '' : 'off'}">${e}</span>`).join('');
+      return `<div class="ach"><div class="md">${md}</div><div><b>${a.name}</b><small>${a.text}: ${v}${have < 3 ? ` / ${next} · siguiente +${MEDAL_REWARD[have]} 🪙` : ' · ¡completo!'}</small></div></div>`;
+    }).join('');
+    this.screen('logros');
+  }
+
+  showStats() {
+    const s = this.save, min = Math.round((s.timePlayed | 0) / 60);
+    const rows = [['Partidas', s.runs | 0], ['Metros recorridos', (s.totalM | 0).toLocaleString('es-MX') + ' m'], ['Pasaje entregado', s.totalPax | 0],
+      ['«¡Casi!»', s.totalNears | 0], ['Combo más alto', '×' + (s.maxCombo | 0)], ['Tráileres aguantados', s.bossWins | 0],
+      ['Monedas ganadas', (s.coinsEarned | 0).toLocaleString('es-MX')], ['Tiempo manejando', min < 60 ? min + ' min' : Math.floor(min / 60) + ' h ' + (min % 60) + ' min'],
+      ...ROUTE_ORDER.map((r) => ['Récord ' + ROUTES[r].name, routeOpen(s, r) ? (s.bestBy?.[r] | 0) + ' m' : '🔒'])];
+    $('s-list').innerHTML = rows.map(([a, b]) => `<div><span>${a}</span><b>${b}</b></div>`).join('');
+    this.screen('stats');
   }
 
   toast(t) { const e = $('toast'); e.textContent = t; e.style.display = 'block'; clearTimeout(this.toastT); this.toastT = setTimeout(() => { e.style.display = 'none'; }, 1400); }
@@ -302,15 +382,19 @@ class Juego extends Phaser.Scene {
     else if (k === 'rain_end') S.rainSound(false);
     else if (k === 'boss') { S.sfx('boss'); this.shake = 0.5; }
     else if (k === 'boss_shift') S.sfx('horn');
+    else if (k === 'cut') S.sfx('lane');
     else if (k === 'boss_win') { S.sfx('win'); this.pop('¡LE AGUANTASTE AL TRÁILER!', '#ffd84a'); this.float('+' + CFG.bossCoins + ' 🪙', px, py, '#ffd84a', 54); }
     else if (k === 'bache') { S.sfx('bache'); this.shake = 0.25; if (a === '1') this.float('¡Se cayó uno! −1 🧍', px, py, '#ff8a6a', 30); }
     else if (k === 'shield') { S.sfx('shield'); this.shake = 0.4; this.pop('¡AGUANTÓ EL GOLPE!', '#9fd8ef'); this.spark(g.x, PLAYER_Y - 80, 30); if (g.knocked) { this.knockV = { v: g.knocked, x: g.knocked.x, y: PLAYER_Y - (g.knocked.s - g.dist), r: 0, vx: (g.knocked.x > g.x ? 1 : -1) * 600 }; this.knock.setTexture('trafico_' + g.knocked.type).setVisible(true); } }
   }
 
   warn(type) {
-    const T = { tianguis: '⚠ ¡TIANGUIS!', lluvia: '🌧 ¡VA A LLOVER!', perro: '🐕 ¡AGUAS, UN PERRO!', baches: '⚠ ¡BACHES!', boss: '🚛 ¡VIENE EL TRÁILER!' };
-    this.tWarn.setText(T[type] || '⚠'); this.warnT = 2.2;
-    S.sfx(type === 'perro' ? 'dog' : 'horn');
+    const f = this.g.feats.find((x) => x.type === type && !x.done && x.warned);
+    const look = f?.look || type;
+    const T = { tianguis: '⚠ ¡TIANGUIS!', obras: '🚧 ¡OBRAS!', mercado: '⚠ ¡MERCADO EN LA CALLE!', lluvia: this.g.ruta === 4 ? '🌧 ¡MONZÓN!' : '🌧 ¡VA A LLOVER!',
+      perro: '🐕 ¡AGUAS, UN PERRO!', vaca: '🐄 ¡UNA VACA!', baches: '⚠ ¡BACHES!', boss: '🚛 ¡VIENE EL TRÁILER!', tren: '🚆 ¡VIENE EL TREN!', vapor: '💨 ¡VAPOR!' };
+    this.tWarn.setText(T[look] || '⚠'); this.warnT = 2.2;
+    S.sfx(look === 'perro' ? 'dog' : 'horn');
   }
   pop(text, color) { this.tPop.setText(text).setColor(color).setScale(1.4); this.popT = 1.1; }
 
@@ -334,15 +418,22 @@ class Juego extends Phaser.Scene {
     try { navigator.vibrate?.(120); } catch { /* sin vibración */ }
 
     const m = meters(g), sc = score(g), c = coins(g), s = this.save;
-    const rec = m > s.best;
-    s.runs++; s.coins += c; s.totalPax += g.delivered; s.totalM += m;
-    if (rec) s.best = m;
+    const rec = m > (s.bestBy?.[g.ruta] | 0);
+    s.coins += c;
+    const res = addRun(s, g, m, c);
+    if (m > s.best) s.best = m;
     if (sc > s.bestScore) s.bestScore = sc;
     writeSave(s);
     if (rec && s.runs > 1) setTimeout(() => S.sfx('record'), 600);
     $('o-title').textContent = { tianguis: '¡TE METISTE AL TIANGUIS!', trailer: '¡TE APLASTÓ EL TRÁILER!', dog: '¡EL PERRITO! (está bien)' }[g.crashKind] || '¡CHOCASTE!';
     $('o-m').textContent = m + ' m';
-    $('o-rec').textContent = rec && s.runs > 1 ? '¡NUEVO RÉCORD!' : 'Récord: ' + s.best + ' m';
+    $('o-rec').textContent = rec && s.runs > 1 ? '¡NUEVO RÉCORD!' : 'Récord: ' + (s.bestBy[g.ruta] | 0) + ' m';
+    const news = [];
+    for (const r of res.opened) news.push(`🗺 ¡Nueva ruta: ${ROUTES[r].name}!`);
+    for (const mi of res.missionsDone) news.push(`✅ Misión: ${mi.def.text(mi.def.n)} · +${mi.def.reward} 🪙`);
+    for (const md of res.medals) news.push(`${MEDAL[md.level]} ${md.a.name} · +${MEDAL_REWARD[md.level]} 🪙`);
+    $('o-news').innerHTML = news.slice(0, 4).join('<br>');
+    writeSave(s);
     $('o-lines').innerHTML = [
       ['Puntos', sc], ['Pasaje entregado', g.delivered + (g.pax ? ` <small>(${g.pax} sin entregar)</small>` : '')],
       ['¡Casi!', g.nears], ...(g.bossWins ? [['Tráileres', g.bossWins]] : []), ['Monedas', '+' + c + ' 🪙'],
@@ -359,18 +450,19 @@ class Juego extends Phaser.Scene {
     const dist = play ? g.dist : this.menuDist;
     gf.clear(); top.clear();
 
-    // banquetas y calle
-    gf.fillStyle(0x8f8a80); gf.fillRect(0, 0, W, H);
-    gf.fillStyle(0x7d786f);
+    // banquetas y calle (según la ruta)
+    const L = LOOK[play ? g.ruta : this.save.ruta] || LOOK[1];
+    gf.fillStyle(L.walk); gf.fillRect(0, 0, W, H);
+    gf.fillStyle(L.slab);
     const slab = 160, off = dist % slab;
     for (let y = -slab + off; y < H; y += slab) { gf.fillRect(0, y, ROAD_X, 4); gf.fillRect(W - ROAD_X, y, ROAD_X, 4); }
-    gf.fillStyle(0x3a3d44); gf.fillRect(ROAD_X, 0, LANE_W * LANES, H);
-    gf.fillStyle(0xf2c230); gf.fillRect(ROAD_X, 0, 8, H); gf.fillRect(ROAD_X + LANE_W * LANES - 8, 0, 8, H);
-    gf.fillStyle(0xe9e6dc);
+    gf.fillStyle(L.road); gf.fillRect(ROAD_X, 0, LANE_W * LANES, H);
+    gf.fillStyle(L.edge); gf.fillRect(ROAD_X, 0, 8, H); gf.fillRect(ROAD_X + LANE_W * LANES - 8, 0, 8, H);
+    gf.fillStyle(L.line);
     const dash = 150, doff = dist % dash;
     for (let i = 1; i < LANES; i++) { const x = ROAD_X + LANE_W * i - 5; for (let y = -dash + doff; y < H; y += dash) gf.fillRect(x, y, 10, 70); }
     const treeGap = 520, toff = dist % treeGap;
-    for (let y = -treeGap + toff; y < H + 80; y += treeGap) { this.tree(top, 28, y); this.tree(top, W - 28, y + treeGap / 2); this.tree(top, W - 28, y - treeGap / 2); }
+    for (let y = -treeGap + toff; y < H + 80; y += treeGap) { this.tree(top, 28, y, L.deco, 0); this.tree(top, W - 28, y + treeGap / 2, L.deco, 1); this.tree(top, W - 28, y - treeGap / 2, L.deco, 1); }
 
     if (play) {
       // cosas en la calle: paradas, terminal, tianguis, baches
@@ -408,7 +500,8 @@ class Juego extends Phaser.Scene {
     }
 
     // perro y Tráiler
-    if (play && g.dog) this.drawDog(top, g.dog.x, this.y(g.dog.s), g.dog.vx);
+    if (play && g.dog) { if (g.dog.f.look === 'vaca') this.drawCow(top, g.dog.x, this.y(g.dog.s), g.dog.vx); else this.drawDog(top, g.dog.x, this.y(g.dog.s), g.dog.vx); }
+    if (play && g.train) this.drawTrain(top, g.train.x, this.y(g.train.s), g.train.vx);
     if (play && g.boss) this.drawTrailer(top, g.boss.x, this.y(g.dist + g.boss.off), g.boss);
 
     // jugador
@@ -424,7 +517,12 @@ class Juego extends Phaser.Scene {
 
     // efectos
     const fx = this.fx; fx.clear();
+    if (L.night) { fx.fillStyle(0x0a0820, L.night); fx.fillRect(0, 0, W, H); }
     if (play && g.rain > 0) this.drawRain(fx, dt);
+    if (play && g.fog > 0) {
+      const a = Math.min(1, g.fog, (7 - g.fog) * 2) * 0.93;
+      for (let i = 0; i < 12; i++) { fx.fillStyle(0xdfe3ea, a * (1 - i / 12)); fx.fillRect(0, i * 55, W, 55); }
+    }
     for (const s of this.sparks) {
       s.life -= dt; if (s.life <= 0) continue;
       s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 1500 * dt;
@@ -439,7 +537,25 @@ class Juego extends Phaser.Scene {
     this.hud(dt);
   }
 
-  tree(gf, x, y) { gf.fillStyle(0x2f6b3a); gf.fillCircle(x, y, 30); gf.fillStyle(0x3f8a4b); gf.fillCircle(x - 6, y - 7, 19); gf.fillStyle(0xa77bd6, 0.9); gf.fillCircle(x + 9, y + 6, 6); gf.fillCircle(x - 12, y + 10, 5); }
+  tree(gf, x, y, deco = 'jacaranda', side = 0) {
+    if (deco === 'neon') {          // Tokio: letreros de neón y cerezos
+      if (side) { gf.fillStyle(OUT); gf.fillRoundedRect(x - 22, y - 50, 44, 100, 8); const on = (this.time.now / 400 + y) % 2 > 0.3; gf.fillStyle(on ? 0x5ff0ff : 0x2a8a96); gf.fillRoundedRect(x - 16, y - 44, 32, 40, 6); gf.fillStyle(on ? 0xff4fa0 : 0x8a2a58); gf.fillRoundedRect(x - 16, y + 2, 32, 40, 6); }
+      else { gf.fillStyle(0x6b3a4a); gf.fillCircle(x, y, 30); gf.fillStyle(0xffb7d5); gf.fillCircle(x - 6, y - 6, 22); gf.fillStyle(0xffd9e8); gf.fillCircle(x + 8, y + 6, 10); }
+      return;
+    }
+    if (deco === 'ny') {             // Nueva York: hidrante y poste de luz
+      if (side) { gf.fillStyle(OUT); gf.fillCircle(x, y, 17); gf.fillStyle(0xd8432e); gf.fillCircle(x, y, 13); gf.fillStyle(0xf4f4f4); gf.fillCircle(x, y, 5); }
+      else { gf.fillStyle(0x30343c); gf.fillCircle(x, y, 12); gf.fillStyle(0xfff3b0, 0.35); gf.fillCircle(x + 20, y, 30); gf.fillStyle(0x6f8a3a); gf.fillCircle(x, y + 200, 24); }
+      return;
+    }
+    if (deco === 'palma') {          // Bombay: palmeras y banderitas
+      gf.fillStyle(0x3f8a4b); for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3 + side; gf.fillEllipse(x + Math.cos(a) * 18, y + Math.sin(a) * 18, 34, 14); }
+      gf.fillStyle(0x8a5a32); gf.fillCircle(x, y, 8);
+      const cols = [0xff5fa2, 0xffd84a, 0x2fa8e0, 0x3fd17a]; for (let k = 0; k < 4; k++) { gf.fillStyle(cols[k]); gf.fillTriangle(x - 24 + k * 14, y + 60, x - 14 + k * 14, y + 60, x - 19 + k * 14, y + 74); }
+      return;
+    }
+    gf.fillStyle(0x2f6b3a); gf.fillCircle(x, y, 30); gf.fillStyle(0x3f8a4b); gf.fillCircle(x - 6, y - 7, 19); gf.fillStyle(0xa77bd6, 0.9); gf.fillCircle(x + 9, y + 6, 6); gf.fillCircle(x - 12, y + 10, 5);
+  }
 
   drawFeat(gf, top, f) {
     const g = this.g;
@@ -466,19 +582,31 @@ class Juego extends Phaser.Scene {
         const cx = (x0 + x1) / 2, cy = y1 + 140;
         gf.fillStyle(col, 0.85); gf.fillTriangle(cx, cy - 40, cx - 34, cy + 10, cx + 34, cy + 10); gf.fillRect(cx - 12, cy + 10, 24, 40);
       }
+    } else if (f.type === 'tren') {
+      const y = this.y(f.s);
+      if (y < -200 || y > H + 200) return;
+      gf.fillStyle(0x5a4a3a); gf.fillRect(0, y - 60, W, 120);
+      gf.fillStyle(0x9a9fa8); gf.fillRect(0, y - 34, W, 8); gf.fillRect(0, y + 26, W, 8);
+      gf.fillStyle(0x6b5a46); for (let x = 0; x < W; x += 40) gf.fillRect(x, y - 44, 14, 88);
+      const on = (this.time.now / 250 | 0) % 2;
+      for (const bx of [24, W - 24]) { top.fillStyle(OUT); top.fillCircle(bx, y + 90, 16); top.fillStyle(on ? 0xff3b30 : 0x5a1a16); top.fillCircle(bx, y + 90, 12); }
+      top.fillStyle(0xffffff); top.fillRect(0, y + 70, 70, 10); top.fillRect(W - 70, y + 70, 70, 10);
+      top.fillStyle(0xd8432e); for (let x = 0; x < 70; x += 20) { top.fillRect(x, y + 70, 10, 10); top.fillRect(W - 70 + x, y + 70, 10, 10); }
     } else if (f.type === 'tianguis') {
       const y0 = Math.max(-40, this.y(f.s + f.len)), y1 = Math.min(H + 40, this.y(f.s));
       if (y1 < -40 || y0 > H + 40) return;
       const lo = Math.min(...f.blocks), hi = Math.max(...f.blocks);
       const x0 = ROAD_X + LANE_W * lo + 4, x1 = ROAD_X + LANE_W * (hi + 1) - 4;
-      const cols = [0xff5fa2, 0x2fa8e0, 0xffd84a, 0x3fd17a, 0xff8a3c];
+      const obras = f.look === 'obras';
+      const cols = obras ? [0xff8a1f, 0xf4f1e6] : f.look === 'mercado' ? [0xd8432e, 0xffd84a, 0x2e9b4f, 0xff5fa2, 0x9b59b6] : [0xff5fa2, 0x2fa8e0, 0xffd84a, 0x3fd17a, 0xff8a3c];
       const step0 = 150, base = this.y(f.s);
       for (let y = base; y > y0 - step0; y -= step0) {
         if (y - step0 > y1) continue;
         const idx = Math.abs(Math.round((base - y) / step0));
         top.fillStyle(OUT); top.fillRect(x0, y - step0, x1 - x0, step0);
         top.fillStyle(cols[idx % cols.length]); top.fillRect(x0 + 4, y - step0 + 4, x1 - x0 - 8, step0 - 8);
-        top.fillStyle(0xffffff, 0.35); for (let x = x0 + 20; x < x1 - 10; x += 60) top.fillRect(x, y - step0 + 4, 22, step0 - 8);
+        if (obras) { top.fillStyle(0xff8a1f); for (let x = x0 + 30; x < x1 - 20; x += 70) top.fillTriangle(x - 18, y - 20, x, y - 70, x + 18, y - 20); }
+        else { top.fillStyle(0xffffff, 0.35); for (let x = x0 + 20; x < x1 - 10; x += 60) top.fillRect(x, y - step0 + 4, 22, step0 - 8); }
       }
       const yb = this.y(f.s);
       if (yb > -20 && yb < H + 20) { top.fillStyle(0xff3b30); for (let x = x0; x < x1; x += 50) { top.fillTriangle(x + 10, yb + 6, x + 25, yb - 26, x + 40, yb + 6); } }
@@ -492,6 +620,28 @@ class Juego extends Phaser.Scene {
     gf.fillStyle(0x6b4423); gf.fillEllipse(x + d * 28, y - 13, 10, 14); gf.fillEllipse(x + d * 28, y + 9, 10, 14);
     const wag = Math.sin(this.time.now / 60) * 8;
     gf.lineStyle(6, 0xb07a45); gf.lineBetween(x - d * 28, y, x - d * 44, y + wag);
+  }
+
+  drawCow(gf, x, y, vx) {
+    const d = Math.sign(vx) || 1;
+    gf.fillStyle(OUT); gf.fillEllipse(x, y, 128, 70); gf.fillStyle(0xf4f1e6); gf.fillEllipse(x, y, 118, 60);
+    gf.fillStyle(0x2a1c12); gf.fillCircle(x - 20, y - 8, 12); gf.fillCircle(x + 14, y + 12, 9); gf.fillCircle(x + 30, y - 14, 7);
+    gf.fillStyle(OUT); gf.fillEllipse(x + d * 66, y, 44, 40); gf.fillStyle(0xf4f1e6); gf.fillEllipse(x + d * 66, y, 36, 32);
+    gf.fillStyle(0xf2c9a0); gf.fillEllipse(x + d * 80, y, 16, 24);
+    gf.fillStyle(0xe2c890); gf.fillTriangle(x + d * 58, y - 16, x + d * 52, y - 34, x + d * 64, y - 18); gf.fillTriangle(x + d * 58, y + 16, x + d * 52, y + 34, x + d * 64, y + 18);
+  }
+
+  drawTrain(gf, x, y, vx) {
+    const len = TRAIN.len, h = TRAIN.l, x0 = x - len / 2;
+    for (let i = 0; i < 5; i++) {
+      const cx = x0 + i * (len / 5) + 6, cw = len / 5 - 12;
+      gf.fillStyle(OUT); gf.fillRoundedRect(cx, y - h / 2, cw, h, 14);
+      gf.fillStyle(0xe9eef5); gf.fillRoundedRect(cx + 5, y - h / 2 + 5, cw - 10, h - 10, 10);
+      gf.fillStyle(0x2f76d2); gf.fillRect(cx + 5, y - 12, cw - 10, 24);
+      gf.fillStyle(GLASS); for (let wx = cx + 24; wx < cx + cw - 30; wx += 46) gf.fillRoundedRect(wx, y - h / 2 + 12, 30, 18, 4);
+    }
+    const nose = vx > 0 ? x0 + len : x0;
+    gf.fillStyle(0xffd84a); gf.fillCircle(nose - Math.sign(vx) * 20, y - 30, 9); gf.fillCircle(nose - Math.sign(vx) * 20, y + 30, 9);
   }
 
   drawTrailer(gf, x, y, b) {
