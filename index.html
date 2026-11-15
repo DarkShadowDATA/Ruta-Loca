@@ -78,7 +78,7 @@
   .card b { font: 400 30px "Arial Black", Impact, sans-serif; color: #ffd84a; }
   .sec-t { font-size: 34px; color: #ffd84a; margin: 18px 0 10px; }
   .shop { display: flex; align-items: center; gap: 16px; background: rgba(27,20,16,.88); border-radius: 22px; padding: 12px 18px; margin-bottom: 12px; font: 700 24px system-ui, sans-serif; }
-  .shop img { height: 120px; }
+  .shop > img { height: 120px; }
   .shop .grow { flex: 1; }
   .shop b { font: 400 30px "Arial Black", Impact, sans-serif; display: block; }
   .shop .btn { font-size: 26px; padding: 12px 22px; margin: 0; box-shadow: 0 5px 0 #a8761a; min-width: 150px; }
@@ -88,6 +88,9 @@
   .paints button { pointer-events: auto; border: 4px solid transparent; border-radius: 16px; background: #2a2420; padding: 4px; cursor: pointer; }
   .paints button.on { border-color: #ffd84a; }
   .paints img { height: 90px; display: block; }
+  .shc { height: 1.25em; width: 1.25em; vertical-align: -0.28em; margin: 0 1px 0 3px; filter: drop-shadow(0 0 3px #a070ff88); }
+  .sh-que { display: flex; align-items: center; gap: 12px; background: rgba(60,30,110,.55); border-radius: 18px; padding: 10px 16px; margin: 6px 0 12px; font: 700 22px system-ui, sans-serif; }
+  .sh-que .shc { height: 40px; width: 40px; flex: none; margin: 0; vertical-align: 0; }
   #toast { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); background: #1b1410; color: #ffd84a; border-radius: 26px; padding: 18px 34px; font-size: 36px; display: none; pointer-events: none; }
 </style>
 </head>
@@ -129,7 +132,7 @@
     <div class="lines" id="s-list" style="min-width:600px;margin-top:20px"></div>
   </div>
   <div id="tienda" class="scr shade" style="background: rgba(10,8,6,.9)">
-    <div class="top"><button class="btn sec back" id="b-tback">◀</button><div>TIENDA</div><div class="pill" style="font-size:30px">💠 <span id="t-shadow">—</span></div></div>
+    <div class="top"><button class="btn sec back" id="b-tback">◀</button><div>TIENDA</div><div class="pill" style="font-size:30px"><span class="shico"></span> <span id="t-shadow">—</span></div></div>
     <div class="list" id="t-list"></div>
   </div>
   <div id="pozo" class="scr shade" style="background: rgba(10,8,6,.9)">
@@ -137,7 +140,7 @@
     <div class="list" id="p-list"></div>
   </div>
   <div id="mercado" class="scr shade" style="background: rgba(10,8,6,.9)">
-    <div class="top"><button class="btn sec back" id="b-mback">◀</button><div>MERCADO</div><div class="pill" style="font-size:30px">💠 <span id="k-shadow">—</span></div></div>
+    <div class="top"><button class="btn sec back" id="b-mback">◀</button><div>MERCADO</div><div class="pill" style="font-size:30px"><span class="shico"></span> <span id="k-shadow">—</span></div></div>
     <div class="list" id="k-list"></div>
   </div>
   <div id="pause" class="scr shade" style="justify-content:center"><div class="big" style="font-size:90px">PAUSA</div><div class="rec">Toca para seguir</div></div>

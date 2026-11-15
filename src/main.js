@@ -11,11 +11,12 @@ import { dailyMissions, addRun, ACHIEVEMENTS, MEDAL, MEDAL_REWARD, statValue, me
 import { loadSave, writeSave, buyVehicle, buyUpgrade, upgradeCost } from './save.js';
 import * as S from './sound.js';
 import { dsTrack } from './dsev.js';
+import { SH, SH_QUE } from './moneda.js';
 import { seedFrom, POZO_RL } from './core.js';
 import { nube, onNube, startNube, buy, loginUrl, shadowUrl, PAINTS, NORMAL_PAINTS, RAR_NAME, paintOfDay, ownedPaints,
   mercadoGet, mercadoVender, mercadoCancelar, mercadoComprar, pozoInfo, pozoStart, pozoFinish } from './tienda.js';
 
-const VERSION = '0.7.0';
+const VERSION = '0.7.1';
 let Q;
 try { Q = new URLSearchParams(location.search); } catch { Q = new URLSearchParams(''); }
 const P = {
@@ -284,6 +285,7 @@ class Juego extends Phaser.Scene {
     click('b-sound', () => { this.save.sound = !this.save.sound; S.setSound(this.save.sound); writeSave(this.save); this.showMenu(); });
     $('pause').addEventListener('click', () => { this.paused = false; this.screen(null); });
     $('ver').textContent = 'prototipo ' + VERSION;
+    for (const e of document.querySelectorAll('.shico')) e.innerHTML = SH;   // saldo de Shadow con su moneda
   }
 
   screen(id) {
@@ -298,7 +300,7 @@ class Juego extends Phaser.Scene {
     const cards = [];
     const pd = paintOfDay();
     if (!ownedPaints().includes(pd)) cards.push(`<div class="card" id="c-trial"><span><b>¡GRATIS HOY!</b> Pintura ${PAINTS[pd].name} por una partida</span><span>▶</span></div>`);
-    if ((s.bestM | 0) >= 1000 && !(nube.compras.inicio > 0)) cards.push(`<div class="card" id="c-inicio"><span><b>Paquete de inicio</b> Vocho + 500 🪙 + pintura Flamas</span><span>10 💠</span></div>`);
+    if ((s.bestM | 0) >= 1000 && !(nube.compras.inicio > 0)) cards.push(`<div class="card" id="c-inicio"><span><b>Paquete de inicio</b> Vocho + 500 🪙 + pintura Flamas</span><span>10${SH}</span></div>`);
     $('m-cards').innerHTML = cards.join('');
     $('c-trial')?.addEventListener('click', () => { if (s.trialDay === new Date().toDateString()) { this.toast('Ya la probaste hoy. Mañana hay otra.'); return; } s.trialDay = new Date().toDateString(); writeSave(s); this.trialNext = pd; S.sfx('buy'); this.start(); });
     $('c-inicio')?.addEventListener('click', () => this.showTienda());
@@ -350,7 +352,7 @@ class Juego extends Phaser.Scene {
     }
     if (!own && nube.tienda.find((t) => t.id === 'veh_' + id)) {
       const t = nube.tienda.find((x) => x.id === 'veh_' + id);
-      h += `<div class="note">¿Lo quieres ya? <button class="btn sec" id="g-adel" style="font-size:24px;padding:8px 18px;margin:0 0 0 8px">${t.shadow} 💠 por adelantado</button></div>`;
+      h += `<div class="note">¿Lo quieres ya? <button class="btn sec" id="g-adel" style="font-size:24px;padding:8px 18px;margin:0 0 0 8px">${t.shadow}${SH} por adelantado</button></div>`;
     }
     $('det').innerHTML = h;
     $('g-buy')?.addEventListener('click', () => { if (buyVehicle(s, id)) { S.sfx('buy'); this.toast('¡Nuevo: ' + v.name + '!'); } else S.sfx('no'); this.showGarage(id); });
@@ -406,10 +408,11 @@ class Juego extends Phaser.Scene {
     $('t-shadow').textContent = nube.on ? nube.shadow : '—';
     const has = (id) => (nube.compras[id] | 0) > 0;
     const row = (img, name, sub, btn) => `<div class="shop">${img ? `<img src="${img}" alt="">` : ''}<div class="grow"><b>${name}</b>${sub}</div>${btn}</div>`;
-    const bb = (id, price, done, label) => done ? `<button class="btn" disabled>${label || 'Tuyo'}</button>` : `<button class="btn" data-buy="${id}">${price} 💠</button>`;
+    const bb = (id, price, done, label) => done ? `<button class="btn" disabled>${label || 'Tuyo'}</button>` : `<button class="btn" data-buy="${id}">${price}${SH}</button>`;
     let h = '';
     if (!nube.on) h += `<div class="note">${nube.can ? 'Para comprar, inicia sesión con tu cuenta DarkShadow.' : 'La tienda funciona en ruta.darkshadow-studios.com con tu cuenta DarkShadow.'}</div>` + (nube.can ? `<button class="btn" id="t-login" style="font-size:34px;padding:14px 34px">Iniciar sesión</button>` : '');
-    else h += `<div class="note">La Shadow se consigue en darkshadow-studios.com/cuenta. <a href="${shadowUrl()}" style="color:#ffd84a">Conseguir Shadow ›</a></div>`;
+    else h += `<div class="note">Tienes <b>${nube.shadow}${SH} Shadow</b> · <a href="${shadowUrl()}" style="color:#ffd84a">Conseguir Shadow ›</a></div>`;
+    h += SH_QUE;
     const t = (id) => nube.tienda.find((x) => x.id === id);
     h += `<div class="sec-t">🎨 Pinturas de la Combi</div><div class="note">Solo cambian cómo se ve. Cada día te prestamos una gratis por una partida.</div>`;
     for (const p of NORMAL_PAINTS) h += row(this.textures.getBase64('veh_combi_' + p), PAINTS[p].name, '', bb('pint_' + p, t('pint_' + p)?.shadow ?? 20, ownedPaints().includes(p)));
@@ -418,7 +421,7 @@ class Juego extends Phaser.Scene {
       h += row(this.textures.getBase64('veh_combi_' + e.ref), PAINTS[e.ref].name, `<small>${RAR_NAME[e.rar]} · quedan ${e.quedan} de ${e.total}</small>`, e.quedan > 0 ? bb('ed_' + e.ref, e.shadow, false) : '<button class="btn" disabled>Agotada</button>');
     if ((this.save.bestM | 0) >= 1000 || has('inicio')) h += `<div class="sec-t">🎁 Paquete de inicio</div>` + row(this.textures.getBase64('veh_vocho'), 'Vocho + 500 🪙 + Flamas', '<small>Una sola vez</small>', bb('inicio', 10, has('inicio')));
     h += `<div class="sec-t">🚐 Vehículos por adelantado</div><div class="note">Todos se consiguen jugando; pagar solo adelanta.</div>`;
-    for (const id of VEH_ORDER.slice(1)) { const it = t('veh_' + id); h += row(this.textures.getBase64('veh_' + id), VEHICLES[id].name, `<small>o ${VEHICLES[id].price} 🪙 en el Garaje</small>`, bb('veh_' + id, it?.shadow ?? '—', this.save.owned[id])); }
+    for (const id of VEH_ORDER.slice(1)) { const it = t('veh_' + id); h += row(this.textures.getBase64('veh_' + id), VEHICLES[id].name, `<small>o ${VEHICLES[id].price} 🪙 en el Garaje</small>`, bb('veh_' + id, it?.shadow ?? { vocho: 15, micro: 20, taxi: 25, guajolotero: 30, moto: 40 }[id], this.save.owned[id])); }
     if (nube.mercado) h += `<div class="sec-t">🏪 Mercado</div>` + row('', 'Pinturas de colección', '<small>Compra y vende con otros jugadores</small>', '<button class="btn" id="t-merc">Abrir</button>');
     h += `<div class="sec-t">☕ Apoyar al estudio</div>` + row('', 'Invítanos un café', `<small>${this.save.apoyo ? 'Ya tienes la insignia ☕ Apoyo. ¡Gracias!' : 'Da la insignia «☕ Apoyo». Se puede repetir.'}</small>`, bb('apoyo', 10, false));
     $('t-list').innerHTML = h;
@@ -439,7 +442,7 @@ class Juego extends Phaser.Scene {
     try { d = await pozoInfo(); } catch (e) { L.innerHTML = `<div class="note">${e.message}</div>`; return; }
     const hrs = Math.max(0, Math.round((new Date(d.endsAt).getTime() - Date.now()) / 3600e3));
     const esc = (x) => String(x ?? '').replace(/[&<>"']/g, '');
-    L.innerHTML = (d.on ? `<div class="lines" style="min-width:0">${['🥇', '🥈', '🥉', '4º', '5º'].map((m, i) => `<div><span>${m}</span><b>${d.prizes[i] || 0} 💠 · ${((d.prizes[i] || 0) / 10).toFixed(2)} USD</b></div>`).join('')}</div>`
+    L.innerHTML = (d.on ? `<div class="lines" style="min-width:0">${['🥇', '🥈', '🥉', '4º', '5º'].map((m, i) => `<div><span>${m}</span><b>${d.prizes[i] || 0}${SH} · ${((d.prizes[i] || 0) / 10).toFixed(2)} USD</b></div>`).join('')}</div>`
       : `<div class="note">Los premios de esta semana todavía no están activos: por ahora se juega por el récord.</div>`) +
       `<div class="note">Termina en ${hrs >= 24 ? `${Math.floor(hrs / 24)} d ${hrs % 24} h` : `${hrs} h`} · tu mejor: <b>${d.best}</b>${d.rank ? ` (#${d.rank})` : ''}</div>` +
       (d.top.length ? `<div class="lines" style="min-width:0">${d.top.map((t) => `<div><span>${t.rank}. ${esc(t.name)}${t.me ? ' (tú)' : ''}</span><b>${t.score}</b></div>`).join('')}</div>` : '<div class="note">Nadie ha jugado esta semana. ¡Sé el primero!</div>') +
@@ -462,9 +465,9 @@ class Juego extends Phaser.Scene {
     const img = (ref) => this.textures.getBase64('veh_combi_' + ref);
     const pr = d.reglas.precios;
     let h = `<div class="note">Comisión 10 % · la venta se publica 7 días · lo ganado en ventas no se puede retirar.</div><div class="sec-t">A la venta</div>`;
-    h += d.listings.length ? d.listings.map((l) => `<div class="shop"><img src="${img(l.ref)}" alt=""><div class="grow"><b>${PAINTS[l.ref]?.name || l.ref}</b><small>${RAR_NAME[l.rar]}${l.serial ? ` · nº ${l.serial}` : ''}</small></div>${l.mine ? `<button class="btn" data-cancel="${l.id}">Quitar</button>` : `<button class="btn" data-get="${l.id}">${l.price} 💠</button>`}</div>`).join('') : '<div class="note">No hay nada a la venta ahora.</div>';
+    h += d.listings.length ? d.listings.map((l) => `<div class="shop"><img src="${img(l.ref)}" alt=""><div class="grow"><b>${PAINTS[l.ref]?.name || l.ref}</b><small>${RAR_NAME[l.rar]}${l.serial ? ` · nº ${l.serial}` : ''}</small></div>${l.mine ? `<button class="btn" data-cancel="${l.id}">Quitar</button>` : `<button class="btn" data-get="${l.id}">${l.price}${SH}</button>`}</div>`).join('') : '<div class="note">No hay nada a la venta ahora.</div>';
     const mine = d.items.filter((i) => i.status === 'bodega');
-    h += `<div class="sec-t">Tus pinturas de colección</div>` + (mine.length ? mine.map((i) => `<div class="shop"><img src="${img(i.ref)}" alt=""><div class="grow"><b>${PAINTS[i.ref]?.name || i.ref}</b><small>${RAR_NAME[i.rar]}${i.serial ? ` · nº ${i.serial}` : ''} · precio ${pr[i.rar][0]}–${pr[i.rar][1]} 💠</small></div><button class="btn" data-sell="${i.id}" data-min="${pr[i.rar][0]}" data-max="${pr[i.rar][1]}" ${i.espera > 0 ? 'disabled' : ''}>Vender</button></div>`).join('') : '<div class="note">No tienes pinturas de colección.</div>');
+    h += `<div class="sec-t">Tus pinturas de colección</div>` + (mine.length ? mine.map((i) => `<div class="shop"><img src="${img(i.ref)}" alt=""><div class="grow"><b>${PAINTS[i.ref]?.name || i.ref}</b><small>${RAR_NAME[i.rar]}${i.serial ? ` · nº ${i.serial}` : ''} · precio ${pr[i.rar][0]}–${pr[i.rar][1]}${SH}</small></div><button class="btn" data-sell="${i.id}" data-min="${pr[i.rar][0]}" data-max="${pr[i.rar][1]}" ${i.espera > 0 ? 'disabled' : ''}>Vender</button></div>`).join('') : '<div class="note">No tienes pinturas de colección.</div>');
     L.innerHTML = h;
     const act = async (fn) => { try { await fn(); S.sfx('buy'); } catch (e) { S.sfx('no'); this.toast(e.message); } this.showMercado(); };
     for (const b of L.querySelectorAll('[data-get]')) b.addEventListener('click', () => act(() => mercadoComprar(b.dataset.get)));
@@ -576,7 +579,7 @@ class Juego extends Phaser.Scene {
     for (const r of res.opened) news.push(`🗺 ¡Nueva ruta: ${ROUTES[r].name}!`);
     for (const mi of res.missionsDone) news.push(`✅ Misión: ${mi.def.text(mi.def.n)} · +${mi.def.reward} 🪙`);
     for (const md of res.medals) news.push(`${MEDAL[md.level]} ${md.a.name} · +${MEDAL_REWARD[md.level]} 🪙`);
-    if (this.trial && !ownedPaints().includes(this.trial)) news.unshift(`¿Te gustó la pintura ${PAINTS[this.trial].name}? <a href="#" id="o-keep" style="color:#ffd84a">Quedármela · 20 💠</a>`);
+    if (this.trial && !ownedPaints().includes(this.trial)) news.unshift(`¿Te gustó la pintura ${PAINTS[this.trial].name}? <a href="#" id="o-keep" style="color:#ffd84a">Quedármela · 20${SH}</a>`);
     $('o-news').innerHTML = news.slice(0, 4).join('<br>');
     $('o-keep')?.addEventListener('click', (e) => { e.preventDefault(); this.showTienda(); });
     $('b-again').textContent = this.pozo ? 'VOLVER AL POZO' : 'OTRA VEZ';
