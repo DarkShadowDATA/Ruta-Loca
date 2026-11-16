@@ -7,8 +7,9 @@ Prompts largos de referencia: doc del proyecto `claude/ruta-loca-arte-completo.m
 
 ## Hechas
 - [x] `veh_combi` 92×180 · `trafico_sedan_rojo` 88×168 · `trafico_ny_taxi` 90×176
+- [x] 16 nov (Alejandro: «usa todos los 1»): `veh_vocho`, `veh_micro`, `veh_taxi`, `veh_guajolotero`, `veh_moto`, `trafico_sedan_azul`, `trafico_taxi`, `trafico_camioneta` (opción 1 de `art_src/gen2/garaje_opciones.jpg` y `trafico1_opciones.jpg`)
 
-## 1. Garaje (elige Alejandro entre opciones)
+## 1. Garaje — HECHO (16 nov)
 | Archivo | Tamaño (w×l) | Qué es |
 |---|---|---|
 | `veh_vocho` | 78×148 | vocho redondo azul cielo |
@@ -17,7 +18,7 @@ Prompts largos de referencia: doc del proyecto `claude/ruta-loca-arte-completo.m
 | `veh_guajolotero` | 104×250 | camión rural amarillo y azul con carga en el techo y una gallina |
 | `veh_moto` | 46×112 | moto de reparto con caja roja y casco amarillo |
 
-## 2. Tráfico Ruta 1
+## 2. Tráfico Ruta 1 — falta `trafico_camion` (las 2 opciones salieron mal) y `trafico_moto`
 | `trafico_sedan_azul` | 88×168 | hatchback azul |
 | `trafico_taxi` | 88×168 | taxi amarillo (tráfico) |
 | `trafico_camioneta` | 98×200 | pickup verde con cajas de naranjas |

@@ -19,3 +19,14 @@ top-down 2D car sprite for a retro overhead racing game like GTA 2, orthographic
 - `veh_combi` ← `art_src/gen/combi_6.jpg` (rot 180; Alejandro eligió esta, la opción 1; se tapó un emblema del frente que parecía de VW). Mismo prompt que la opción 2 (`combi_7.jpg`): bloque base + «a 1960s split-window minibus van used as Mexican public transport, cream white roof with a wide orange band across the front and a teal stripe, small roof rack with tied brown bundles in the middle»
 - `trafico_sedan_rojo` ← `art_src/gen/sedan_2.jpg` (rot 180): bloque base (sin «long vertical shape») + «a red compact sedan, windshield at the top, rear window at the bottom»
 - `trafico_ny_taxi` ← `art_src/gen/taxi_2.jpg`: bloque base + «a yellow new york taxi cab» (trae la palabra TAXI en el letrero; aceptable)
+
+- 16 nov, opción 1 de cada uno (Alejandro: «usa todos los 1»), con el bloque base + estas descripciones (modelo schnell):
+  - `veh_vocho` (rot 180): «a light sky-blue classic round beetle car, rounded hood and roof, chrome bumpers, small and compact»
+  - `veh_micro` (`--tono 0.08 --sombra --nivel 0.6`): «a long Mexico City green and white microbus minibus, white front cap with big windshield, green roof with two roof vents, long vertical shape almost three times as long as wide»
+  - `veh_taxi` (`--sin-verde`; la imagen traía marco blanco): «a Mexico City taxi sedan painted pink on the hood and trunk with a white roof and a small blank roof light»
+  - `veh_guajolotero`: «an old Mexican rural bus with a yellow front and blue body, a roof rack overloaded with tied bundles, wooden crates, baskets and one white chicken, long vertical shape»
+  - `veh_moto` (`--sin-verde`): «a delivery motorcycle with its rider seen from above, rider with a round yellow helmet and hands on the handlebars, big square red delivery box on the back, very narrow vertical shape»
+  - `trafico_sedan_azul`: «a compact royal blue hatchback car with a short rear end, light blue windshield»
+  - `trafico_taxi`: «a yellow and white Mexican city taxi sedan with a small blank roof light»
+  - `trafico_camioneta`: «an old green pickup truck, short cab at the top, open cargo bed at the bottom loaded with wooden crates of oranges»
+- Recorte (`tools/arte_rl.py`): todos con `--vertical`. Vehículos que NO son verdes: `--sin-verde` quita cualquier resto del fondo. Vehículos verdes: `--sombra --nivel 0.6` (quita solo la sombra oscura, sin comerse el techo).
