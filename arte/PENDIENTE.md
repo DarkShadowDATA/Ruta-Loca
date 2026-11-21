@@ -18,7 +18,7 @@ Prompts largos de referencia: doc del proyecto `claude/ruta-loca-arte-completo.m
 | `veh_guajolotero` | 104×250 | camión rural amarillo y azul con carga en el techo y una gallina |
 | `veh_moto` | 46×112 | moto de reparto con caja roja y casco amarillo |
 
-## 2. Tráfico Ruta 1 — falta `trafico_camion` (las 2 opciones salieron mal) y `trafico_moto`
+## 2. Tráfico Ruta 1 — HECHO (20 nov) salvo `trafico_moto`
 | `trafico_sedan_azul` | 88×168 | hatchback azul |
 | `trafico_taxi` | 88×168 | taxi amarillo (tráfico) |
 | `trafico_camioneta` | 98×200 | pickup verde con cajas de naranjas |
@@ -43,3 +43,5 @@ Ojo: con el generador es difícil que salga la MISMA combi; probar pidiendo la m
 
 ## 6. Interfaz
 `icono_moneda` 64×64 · `tarjeta_ruta1..4` 330×110 · `menu_fondo` 720×1280 · **sin logo hasta que haya nombre**.
+
+- [x] 20 nov (Alejandro: «mételos todos», hoja `art_src/gen4/hoja_forma_propia.png`): `veh_micro`, `veh_taxi`, `veh_guajolotero`, `trafico_sedan_azul`, `trafico_taxi`, `trafico_camioneta`, `trafico_camion` con forma propia y estilo del vocho. `veh_moto` se queda la anterior. Falta `trafico_moto` (dibujo de código).
