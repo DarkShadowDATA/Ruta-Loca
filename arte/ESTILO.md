@@ -30,3 +30,9 @@ top-down 2D car sprite for a retro overhead racing game like GTA 2, orthographic
   - `trafico_taxi`: «a yellow and white Mexican city taxi sedan with a small blank roof light»
   - `trafico_camioneta`: «an old green pickup truck, short cab at the top, open cargo bed at the bottom loaded with wooden crates of oranges»
 - Recorte (`tools/arte_rl.py`): todos con `--vertical`. Vehículos que NO son verdes: `--sin-verde` quita cualquier resto del fondo. Vehículos verdes: `--sombra --nivel 0.6` (quita solo la sombra oscura, sin comerse el techo).
+
+## 20 nov — mismo modelo para todos (orden de Alejandro vía la mente maestra)
+- Modelo: FLUX.2 klein (por defecto del generador) con **referencia = `art_src/gen2/vocho_1.jpg`** (vocho azul claro, vista desde arriba, sombra abajo a la derecha). Para vehículos largos (micro, guajolotero, camión) se manda también la combi (`art_src/gen/combi_6.jpg`) como 2.ª referencia de forma. Script: `GEN_KEY=… python3 tools/gen_ref_vocho.py lista.json` (lista de `[nombre, descripción]`; los vehículos salen horizontales apuntando a la derecha).
+- Recorte: `tools/arte_rl.py … --vertical` (SIN `--rot`: así quedan con el frente hacia arriba) + `--sin-verde`; el micro con `--sombra --nivel 0.6`.
+- Originales en `art_src/gen3/`, recortados listos en `art_src/gen3/listos/`, hoja para Alejandro `art_src/gen3/hoja_mismo_estilo.png`. Candidatos: micro_4, taxirosa_1, guajolotero_2, sedan_azul_2, taxi_2, camioneta_2, camion_2. La camioneta se pidió naranja (en verde se pierde con el fondo).
+- La moto NO sale: con el vocho de referencia el modelo dibuja un coche con repartidor; con una moto de referencia sale torcida (mejor intento: moto_9).
