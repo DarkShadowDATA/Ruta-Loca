@@ -36,3 +36,12 @@ top-down 2D car sprite for a retro overhead racing game like GTA 2, orthographic
 - Recorte: `tools/arte_rl.py … --vertical` (SIN `--rot`: así quedan con el frente hacia arriba) + `--sin-verde`; el micro con `--sombra --nivel 0.6`.
 - Originales en `art_src/gen3/`, recortados listos en `art_src/gen3/listos/`, hoja para Alejandro `art_src/gen3/hoja_mismo_estilo.png`. Candidatos: micro_4, taxirosa_1, guajolotero_2, sedan_azul_2, taxi_2, camioneta_2, camion_2. La camioneta se pidió naranja (en verde se pierde con el fondo).
 - La moto NO sale: con el vocho de referencia el modelo dibuja un coche con repartidor; con una moto de referencia sale torcida (mejor intento: moto_9).
+
+## 20 nov (2.º intento) — forma propia + estilo del vocho
+Alejandro: los de `gen3` parecían vochos con otra pintura. Del vocho solo se toma el ESTILO, no la carrocería. Método que sí funcionó:
+1. **Forma**: FLUX schnell (`tools/arte_gen4s.py lista.json '{"modelo":"schnell","steps":8}'`) con «top-down 2D vehicle sprite … like GTA 2» + descripción de la silueta real. Schnell sí respeta la vista desde arriba. Originales `art_src/gen4/s_*.jpg`.
+2. **Estilo**: FLUX klein con esa imagen de schnell como única referencia (`tools/arte_gen4u.py`, lista `[nombre, archivo_s, descripción]`): «Redraw the vehicle from the reference image, keeping exactly its shape… as a cartoon illustration with thin dark outline, bright saturated glossy colors with soft white highlights, soft dark green drop shadow toward the bottom right, plain flat green background». Sin mandar el vocho (si se manda, copia su carrocería). Resultado `art_src/gen4/u_*.jpg`.
+- klein solo con texto NO hace vista desde arriba (sale de lado en 3/4).
+- Candidatos: micro ← `u_micro`, taxi rosa ← `u_taxirosa2`, guajolotero ← `u_guajolotero2` (`--sombra --nivel 0.82`), sedán azul ← `u_sedan_azul`, taxi ← `u_taxi`, camioneta ← `u_camioneta2` (`--rot 180`), camión ← `u_camion`. Todos con `--vertical --sin-verde` (micro: `--sombra --nivel 0.6`). Recortados en `art_src/gen4/listos/`.
+- Moto: el último intento (`u_moto`) salió mal → se queda la moto actual (orden de Alejandro).
+- Las claves se pasan con `GEN_KEY` en el entorno (los scripts no la traen).
